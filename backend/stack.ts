@@ -705,6 +705,54 @@ export class Stack {
             return statsByService;
         }
     }
+
+    async getServiceContainers(serviceName: string) {
+        const containers: Array<{
+            id: string,
+            name: string,
+            service: string,
+            state: string,
+            health: string,
+        }> = [];
+
+        try {
+            const res = await spawnDocker(this.server, this.getComposeOptions("ps", "--format", "json"), this.fullPath, {
+                encoding: "utf-8",
+            });
+
+            if (!res.stdout) {
+                return containers;
+            }
+
+            for (const line of res.stdout.toString().split("\n")) {
+                if (!line.trim()) {
+                    continue;
+                }
+
+                try {
+                    const obj = JSON.parse(line) as Record<string, string>;
+                    if (obj.Service !== serviceName || !obj.Name) {
+                        continue;
+                    }
+
+                    containers.push({
+                        id: obj.ID || obj.Name,
+                        name: obj.Name,
+                        service: obj.Service,
+                        state: obj.State || "unknown",
+                        health: obj.Health || "",
+                    });
+                } catch (e) {
+                    log.debug("getServiceContainers", `Failed to parse compose ps line: ${e instanceof Error ? e.message : "unknown error"}`);
+                }
+            }
+
+            return containers;
+        } catch (e) {
+            log.error("getServiceContainers", e);
+            return containers;
+        }
+    }
 }
 
 function parsePercent(value?: string) {

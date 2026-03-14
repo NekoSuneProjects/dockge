@@ -16,12 +16,27 @@
   - roles
   - stack assignments
   - OAuth providers
-- Quick install app catalog in the dashboard.
+- Quick install app catalog with a dedicated `Apps` page.
 - One-click app installs for starter templates including:
   - Ollama
   - Open WebUI
   - Uptime Kuma
   - MariaDB
+- Expanded one-click app installs for:
+  - MinIO
+  - Nextcloud
+  - Media Node
+  - AdGuard Home
+  - Speedtest Tracker
+  - FlareSolverr
+  - IPFS
+  - Nginx Proxy Manager
+  - Nostr Relay
+  - SearXNG
+  - LiteLLM
+  - Restreamer
+  - Postgres
+  - Redis Stack
 - Install target selection for local or remote agent nodes.
 - Cancel / kill support for stuck stack deploys, updates, and image pulls.
 - Node hardware detection in the web UI:
@@ -43,6 +58,14 @@
   - upload
   - download
   - delete
+- Container file manager in the web UI on a dedicated page:
+  - browse running container paths
+  - select container instance per service
+  - read
+  - edit
+  - upload
+  - download
+  - delete
 - Windows support improvements:
   - Docker Desktop native mode
   - WSL2 Docker execution mode with optional distro selection
@@ -58,6 +81,27 @@
   - stop
   - restart
   - bash shortcut
+- Dedicated `Apps` page with:
+  - app search
+  - category filters
+  - pagination
+- Dedicated app install progress page with:
+  - live install console
+  - progress bar
+  - auto-open on success
+  - failed install cleanup action for the failed stack only
+- Docker admin UI redesign with:
+  - summary cards
+  - image search and usage filters
+  - container search and status filters
+  - pagination for images and containers
+- Official Dockge to fork SQLite upgrade compatibility support:
+  - additive schema repair for missing fork tables and columns
+  - preserves existing user data during upgrade
+  - backfills owner and RBAC defaults when needed
+- Docker CLI runtime detection improvements:
+  - checks common docker binary paths
+  - clearer error message when the container image is missing the Docker CLI
 
 ### Changed
 
@@ -69,9 +113,15 @@
   - deleted
 - Stack operations, terminals, file access, and admin features now enforce permissions.
 - Compose and Docker execution paths now use a shared runtime abstraction for Linux, Windows, Docker Desktop, and WSL2.
+- The quick install catalog was moved out of the dashboard into its own `Apps` page.
+- App installs now use a dedicated install flow page instead of only a modal.
+- The compose page now labels host-level file access as `Stack Files` to distinguish it from container file browsing.
+- README now documents this repository as the NekoSuneVR fork of Dockge with active feature development and early-access positioning.
 
 ### Notes
 
 - File access is restricted to the selected stack directory root.
+- Container file browsing uses shell access inside the running container and may not work on extremely minimal images without `sh` or `bash`.
 - OAuth uses generic OAuth2 / OIDC provider configuration rather than only vendor-specific login.
 - The owner account can only be removed by fully wiping the installation and reinstalling Dockge.
+- Existing official Dockge SQLite databases can be opened by this fork and upgraded in place through additive schema changes.

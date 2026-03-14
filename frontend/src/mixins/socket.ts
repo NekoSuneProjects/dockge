@@ -8,6 +8,7 @@ import { AgentSocket } from "../../../common/agent-socket";
 let socket : Socket;
 
 let terminalMap : Map<string, Terminal> = new Map();
+let terminalListenerMap : Map<string, Set<{ onWrite?: (data: string) => void, onExit?: (exitCode: number) => void }>> = new Map();
 
 export default defineComponent({
     data() {
@@ -31,6 +32,7 @@ export default defineComponent({
             username: null,
             sessionUser: null,
             composeTemplate: "",
+            pendingAppInstall: null,
 
             stackList: {},
 
@@ -258,11 +260,25 @@ export default defineComponent({
 
             agentSocket.on("terminalWrite", (terminalName, data) => {
                 const terminal = terminalMap.get(terminalName);
-                if (!terminal) {
-                    //console.error("Terminal not found: " + terminalName);
-                    return;
+                if (terminal) {
+                    terminal.write(data);
                 }
-                terminal.write(data);
+
+                const listeners = terminalListenerMap.get(terminalName);
+                if (listeners) {
+                    for (const listener of listeners) {
+                        listener.onWrite?.(data);
+                    }
+                }
+            });
+
+            agentSocket.on("terminalExit", (terminalName, exitCode) => {
+                const listeners = terminalListenerMap.get(terminalName);
+                if (listeners) {
+                    for (const listener of listeners) {
+                        listener.onExit?.(exitCode);
+                    }
+                }
             });
 
             agentSocket.on("stackList", (res) => {
@@ -462,6 +478,24 @@ export default defineComponent({
 
         unbindTerminal(terminalName : string) {
             terminalMap.delete(terminalName);
+        },
+
+        addTerminalListener(terminalName : string, listener: { onWrite?: (data: string) => void, onExit?: (exitCode: number) => void }) {
+            if (!terminalListenerMap.has(terminalName)) {
+                terminalListenerMap.set(terminalName, new Set());
+            }
+            terminalListenerMap.get(terminalName)?.add(listener);
+        },
+
+        removeTerminalListener(terminalName : string, listener: { onWrite?: (data: string) => void, onExit?: (exitCode: number) => void }) {
+            const listeners = terminalListenerMap.get(terminalName);
+            if (!listeners) {
+                return;
+            }
+            listeners.delete(listener);
+            if (listeners.size === 0) {
+                terminalListenerMap.delete(terminalName);
+            }
         },
 
     }

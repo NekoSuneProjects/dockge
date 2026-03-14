@@ -67,21 +67,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <h2 class="mb-3">Quick Install Apps</h2>
-                        <div class="app-grid">
-                            <div v-for="app in appCatalog" :key="app.id" class="shadow-box big-padding app-card">
-                                <div class="d-flex justify-content-between align-items-start gap-2">
-                                    <div>
-                                        <h4 class="mb-2">{{ app.name }}</h4>
-                                        <div class="text-muted small mb-2">{{ app.category }}</div>
-                                    </div>
-                                    <span v-if="app.ports.length > 0" class="badge bg-secondary">{{ app.ports.join(", ") }}</span>
-                                </div>
-                                <p class="mb-3 app-description">{{ app.description }}</p>
-                                <button class="btn btn-primary" @click="openInstallDialog(app)">Install</button>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <!-- Right -->
@@ -157,42 +142,6 @@
         </div>
     </transition>
 
-    <BModal
-        v-model="showInstallDialog"
-        title="Install App"
-        :okTitle="installingApp ? 'Installing...' : 'Install'"
-        :okDisabled="installingApp || !selectedApp"
-        @ok="installSelectedApp"
-    >
-        <div v-if="selectedApp">
-            <div class="mb-3">
-                <label class="form-label">App</label>
-                <input class="form-control" :value="selectedApp.name" disabled>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Stack Name</label>
-                <input v-model="installForm.stackName" class="form-control" />
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Node</label>
-                <select v-model="installForm.endpoint" class="form-select">
-                    <option v-for="option in endpointOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                    </option>
-                </select>
-            </div>
-            <div v-for="field in selectedApp.values" :key="field.key" class="mb-3">
-                <label class="form-label">{{ field.label }}</label>
-                <input v-model="installForm.values[field.key]" class="form-control" />
-                <div v-if="field.description" class="form-text">{{ field.description }}</div>
-            </div>
-
-            <div v-if="installingApp" class="alert alert-warning mb-0">
-                Install is running. If image pulling gets stuck, you can cancel it.
-                <button class="btn btn-sm btn-warning ms-2" @click="cancelInstall">Cancel</button>
-            </div>
-        </div>
-    </BModal>
     <router-view ref="child" />
 </template>
 
@@ -225,15 +174,6 @@ export default {
             showAgentForm: false,
             showRemoveAgentDialog: {},
             connectingAgent: false,
-            appCatalog: [],
-            showInstallDialog: false,
-            installingApp: false,
-            selectedApp: null,
-            installForm: {
-                stackName: "",
-                endpoint: "",
-                values: {},
-            },
             systemSpecs: {},
             updateAllEndpoint: "",
             updatingAllStacks: false,
@@ -255,26 +195,6 @@ export default {
         },
         exitedNum() {
             return this.getStatusNum("exited");
-        },
-        endpointOptions() {
-            const options = [
-                {
-                    value: "",
-                    label: this.$t("currentEndpoint"),
-                }
-            ];
-
-            for (const endpoint of Object.keys(this.$root.agentList)) {
-                if (!endpoint) {
-                    continue;
-                }
-                options.push({
-                    value: endpoint,
-                    label: endpoint,
-                });
-            }
-
-            return options;
         },
     },
 
@@ -301,7 +221,6 @@ export default {
 
         window.addEventListener("resize", this.updatePerPage);
         this.updatePerPage();
-        this.loadAppCatalog();
         this.loadSystemSpecs();
     },
 
@@ -373,19 +292,6 @@ export default {
             });
         },
 
-        loadAppCatalog() {
-            if (!this.$root.isAdmin) {
-                return;
-            }
-            this.$root.getSocket().emit("getAppCatalog", (res) => {
-                if (res.ok) {
-                    this.appCatalog = res.apps;
-                } else {
-                    this.$root.toastRes(res);
-                }
-            });
-        },
-
         updateAllStacks() {
             this.updatingAllStacks = true;
             this.updateAllResult = null;
@@ -394,55 +300,6 @@ export default {
                 this.updatingAllStacks = false;
                 this.updateAllResult = res;
                 this.$root.toastRes(res);
-            });
-        },
-
-        openInstallDialog(app) {
-            this.selectedApp = app;
-            const values = {};
-            for (const field of app.values || []) {
-                values[field.key] = field.defaultValue;
-            }
-            this.installForm = {
-                stackName: app.defaultStackName,
-                endpoint: "",
-                values,
-            };
-            this.showInstallDialog = true;
-        },
-
-        installSelectedApp(bvModalEvent) {
-            bvModalEvent.preventDefault();
-            if (!this.selectedApp) {
-                return;
-            }
-            this.installingApp = true;
-            this.$root.emitAgent(this.installForm.endpoint, "installAppTemplate", this.selectedApp.id, {
-                stackName: this.installForm.stackName,
-                values: this.installForm.values,
-            }, (res) => {
-                this.installingApp = false;
-                this.$root.toastRes(res);
-                if (res.ok) {
-                    this.showInstallDialog = false;
-                    if (this.installForm.endpoint) {
-                        this.$router.push(`/compose/${res.stackName}/${this.installForm.endpoint}`);
-                    } else {
-                        this.$router.push(`/compose/${res.stackName}`);
-                    }
-                }
-            });
-        },
-
-        cancelInstall() {
-            if (!this.installForm.stackName) {
-                return;
-            }
-            this.$root.emitAgent(this.installForm.endpoint, "cancelStackOperation", this.installForm.stackName, (res) => {
-                this.$root.toastRes(res);
-                if (res.ok) {
-                    this.installingApp = false;
-                }
             });
         },
 
@@ -612,22 +469,6 @@ table {
 .agent-specs {
     font-size: 0.9rem;
     line-height: 1.45;
-}
-
-.app-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
-}
-
-.app-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.app-description {
-    min-height: 3.5rem;
 }
 
 .update-results {

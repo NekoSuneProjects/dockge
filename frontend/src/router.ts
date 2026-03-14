@@ -4,8 +4,11 @@ import Layout from "./layouts/Layout.vue";
 import Setup from "./pages/Setup.vue";
 import Dashboard from "./pages/Dashboard.vue";
 import DashboardHome from "./pages/DashboardHome.vue";
+import Apps from "./pages/Apps.vue";
+import AppInstallProgress from "./pages/AppInstallProgress.vue";
 import Console from "./pages/Console.vue";
 import Compose from "./pages/Compose.vue";
+import ContainerFiles from "./pages/ContainerFiles.vue";
 import ContainerTerminal from "./pages/ContainerTerminal.vue";
 
 const Settings = () => import("./pages/Settings.vue");
@@ -56,6 +59,16 @@ const routes = [
                                 component: ContainerTerminal,
                                 name: "containerTerminalEndpoint",
                             },
+                            {
+                                path: "/container-files/:stackName/:serviceName",
+                                component: ContainerFiles,
+                                name: "containerFiles",
+                            },
+                            {
+                                path: "/container-files/:stackName/:serviceName/:endpoint",
+                                component: ContainerFiles,
+                                name: "containerFilesEndpoint",
+                            },
                         ]
                     },
                     {
@@ -65,6 +78,16 @@ const routes = [
                     {
                         path: "/console/:endpoint",
                         component: Console,
+                    },
+                    {
+                        path: "/apps",
+                        name: "Apps",
+                        component: Apps,
+                    },
+                    {
+                        path: "/apps/install/:appID",
+                        name: "AppInstallProgress",
+                        component: AppInstallProgress,
                     },
                     {
                         path: "/settings",

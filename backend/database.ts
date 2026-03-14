@@ -4,6 +4,7 @@ import { DockgeServer } from "./dockge-server";
 import fs from "fs";
 import path from "path";
 import knex from "knex";
+import type { Knex } from "knex";
 
 // @ts-ignore
 import Dialect from "knex/lib/dialects/sqlite3/index.js";
@@ -195,6 +196,91 @@ export class Database {
                     throw e;
                 }
             }
+        }
+
+        await Database.ensureForkSchemaCompatibility();
+    }
+
+    /**
+     * Keep official Dockge SQLite databases upgrade-safe when switching to this fork.
+     * This is intentionally additive: it only creates missing tables/columns and backfills defaults.
+     */
+    static async ensureForkSchemaCompatibility() {
+        const knex = R.knex;
+
+        if (await knex.schema.hasTable("user")) {
+            const missingColumns = {
+                role: !(await knex.schema.hasColumn("user", "role")),
+                auth_provider: !(await knex.schema.hasColumn("user", "auth_provider")),
+                provider_subject: !(await knex.schema.hasColumn("user", "provider_subject")),
+                display_name: !(await knex.schema.hasColumn("user", "display_name")),
+                owner: !(await knex.schema.hasColumn("user", "owner")),
+            };
+
+            if (Object.values(missingColumns).some(Boolean)) {
+                await knex.schema.alterTable("user", (table: Knex.AlterTableBuilder) => {
+                    if (missingColumns.role) {
+                        table.string("role", 32).notNullable().defaultTo("admin");
+                    }
+                    if (missingColumns.auth_provider) {
+                        table.string("auth_provider", 32).notNullable().defaultTo("local");
+                    }
+                    if (missingColumns.provider_subject) {
+                        table.string("provider_subject", 255).nullable();
+                    }
+                    if (missingColumns.display_name) {
+                        table.string("display_name", 255).nullable();
+                    }
+                    if (missingColumns.owner) {
+                        table.boolean("owner").notNullable().defaultTo(false);
+                    }
+                });
+            }
+
+            if (await knex.schema.hasColumn("user", "role")) {
+                await knex.raw("UPDATE `user` SET `role` = COALESCE(`role`, 'admin')");
+            }
+
+            if (await knex.schema.hasColumn("user", "auth_provider")) {
+                await knex.raw("UPDATE `user` SET `auth_provider` = COALESCE(`auth_provider`, 'local')");
+            }
+
+            if (await knex.schema.hasColumn("user", "display_name")) {
+                await knex.raw("UPDATE `user` SET `display_name` = `username` WHERE `display_name` IS NULL");
+            }
+
+            if (await knex.schema.hasColumn("user", "owner")) {
+                const existingOwner = await knex("user").where({ owner: true }).first();
+                if (!existingOwner) {
+                    const firstUser = await knex("user").orderBy("id", "asc").first("id");
+                    if (firstUser) {
+                        const updatePayload: Record<string, unknown> = {
+                            owner: true,
+                        };
+
+                        if (await knex.schema.hasColumn("user", "role")) {
+                            updatePayload.role = "admin";
+                        }
+
+                        if (await knex.schema.hasColumn("user", "auth_provider")) {
+                            updatePayload.auth_provider = "local";
+                        }
+
+                        await knex("user").where({ id: firstUser.id }).update(updatePayload);
+                    }
+                }
+            }
+        }
+
+        if (!await knex.schema.hasTable("stack_access")) {
+            await knex.schema.createTable("stack_access", (table: Knex.CreateTableBuilder) => {
+                table.increments("id");
+                table.integer("user_id").unsigned().notNullable();
+                table.string("stack_name", 255).notNullable();
+                table.string("endpoint", 255).notNullable().defaultTo("");
+                table.foreign("user_id").references("user.id").onDelete("CASCADE");
+                table.unique([ "user_id", "stack_name", "endpoint" ]);
+            });
         }
     }
 

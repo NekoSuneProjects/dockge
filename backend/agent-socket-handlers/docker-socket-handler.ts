@@ -66,6 +66,11 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 const install = buildAppInstall(appID, requestData as Record<string, string>);
                 const stack = new Stack(server, install.stackName, install.composeYAML, install.composeENV, false);
                 await stack.save(true);
+                for (const file of install.extraFiles || []) {
+                    const filePath = path.join(stack.path, file.path);
+                    await fsAsync.mkdir(path.dirname(filePath), { recursive: true });
+                    await fsAsync.writeFile(filePath, file.content, "utf-8");
+                }
                 await stack.deploy(socket);
                 server.sendStackList();
 
@@ -404,6 +409,25 @@ export class DockerSocketHandler extends AgentSocketHandler {
             }
         });
 
+        agentSocket.on("stackServiceContainers", async (stackName : unknown, serviceName : unknown, callback) => {
+            try {
+                checkLogin(socket);
+
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string") {
+                    throw new ValidationError("Invalid service request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const stack = await Stack.getStack(server, stackName, true);
+                callbackResult({
+                    ok: true,
+                    containers: await stack.getServiceContainers(serviceName),
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
         // getExternalNetworkList
         agentSocket.on("getDockerNetworkList", async (callback) => {
             try {
@@ -638,6 +662,153 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 callbackError(e, callback);
             }
         });
+
+        agentSocket.on("containerFileList", async (stackName : unknown, serviceName : unknown, containerID : unknown, targetPath : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string" || typeof(containerID) !== "string" || typeof(targetPath) !== "string") {
+                    throw new ValidationError("Invalid container file request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const containerName = await this.resolveServiceContainer(server, stackName, serviceName, containerID);
+                const normalizedPath = this.normalizeContainerPath(targetPath);
+                const script = "target=\"$1\"; if [ ! -d \"$target\" ]; then echo \"__DOCKGE_NOT_DIR__\"; exit 12; fi; cd \"$target\" || exit 13; for entry in .* *; do if [ \"$entry\" = \".\" ] || [ \"$entry\" = \"..\" ]; then continue; fi; if [ ! -e \"$entry\" ]; then continue; fi; if [ -d \"$entry\" ]; then type=\"dir\"; else type=\"file\"; fi; printf \"%s\\t%s\\n\" \"$type\" \"$entry\"; done";
+                const res = await this.execContainerShell(server, containerName, script, [ normalizedPath ]);
+                const stdout = res.stdout?.toString("utf-8") || "";
+
+                if (stdout.includes("__DOCKGE_NOT_DIR__")) {
+                    throw new ValidationError("Directory not found in container");
+                }
+
+                const files = stdout
+                    .split("\n")
+                    .filter((line) => line.trim())
+                    .map((line) => {
+                        const [ type, ...nameParts ] = line.split("\t");
+                        return {
+                            name: nameParts.join("\t"),
+                            isDirectory: type === "dir",
+                        };
+                    })
+                    .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name));
+
+                callbackResult({
+                    ok: true,
+                    cwd: normalizedPath,
+                    files,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("containerFileRead", async (stackName : unknown, serviceName : unknown, containerID : unknown, targetPath : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string" || typeof(containerID) !== "string" || typeof(targetPath) !== "string") {
+                    throw new ValidationError("Invalid container file request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const containerName = await this.resolveServiceContainer(server, stackName, serviceName, containerID);
+                const normalizedPath = this.normalizeContainerPath(targetPath);
+                const res = await this.execContainerShell(server, containerName, "cat -- \"$1\"", [ normalizedPath ]);
+                callbackResult({
+                    ok: true,
+                    content: res.stdout?.toString("utf-8") || "",
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("containerFileWrite", async (stackName : unknown, serviceName : unknown, containerID : unknown, targetPath : unknown, content : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string" || typeof(containerID) !== "string" || typeof(targetPath) !== "string" || typeof(content) !== "string") {
+                    throw new ValidationError("Invalid container file request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const containerName = await this.resolveServiceContainer(server, stackName, serviceName, containerID);
+                const normalizedPath = this.normalizeContainerPath(targetPath);
+                await this.execContainerShell(server, containerName, "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\"", [ normalizedPath ], {
+                    stdin: Buffer.from(content, "utf-8"),
+                    interactive: true,
+                });
+                callbackResult({
+                    ok: true,
+                    msg: "Saved",
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("containerFileDelete", async (stackName : unknown, serviceName : unknown, containerID : unknown, targetPath : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string" || typeof(containerID) !== "string" || typeof(targetPath) !== "string") {
+                    throw new ValidationError("Invalid container file request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const containerName = await this.resolveServiceContainer(server, stackName, serviceName, containerID);
+                const normalizedPath = this.normalizeContainerPath(targetPath);
+                await this.execContainerShell(server, containerName, "rm -rf -- \"$1\"", [ normalizedPath ]);
+                callbackResult({
+                    ok: true,
+                    msg: "Deleted",
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("containerFileUpload", async (stackName : unknown, serviceName : unknown, containerID : unknown, currentPath : unknown, fileName : unknown, contentBase64 : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string" || typeof(containerID) !== "string" || typeof(currentPath) !== "string" || typeof(fileName) !== "string" || typeof(contentBase64) !== "string") {
+                    throw new ValidationError("Invalid upload request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const containerName = await this.resolveServiceContainer(server, stackName, serviceName, containerID);
+                const normalizedPath = this.normalizeContainerPath(path.posix.join(currentPath.replace(/\\/g, "/"), fileName));
+                await this.execContainerShell(server, containerName, "mkdir -p \"$(dirname \"$1\")\" && cat > \"$1\"", [ normalizedPath ], {
+                    stdin: Buffer.from(contentBase64, "base64"),
+                    interactive: true,
+                });
+                callbackResult({
+                    ok: true,
+                    msg: "Uploaded",
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        agentSocket.on("containerFileDownload", async (stackName : unknown, serviceName : unknown, containerID : unknown, targetPath : unknown, callback) => {
+            try {
+                checkLogin(socket);
+                if (typeof(stackName) !== "string" || typeof(serviceName) !== "string" || typeof(containerID) !== "string" || typeof(targetPath) !== "string") {
+                    throw new ValidationError("Invalid download request");
+                }
+                await requireStackAccess(socket, stackName, socket.endpoint);
+
+                const containerName = await this.resolveServiceContainer(server, stackName, serviceName, containerID);
+                const normalizedPath = this.normalizeContainerPath(targetPath);
+                const res = await this.execContainerShell(server, containerName, "cat -- \"$1\"", [ normalizedPath ]);
+                callbackResult({
+                    ok: true,
+                    fileName: path.posix.basename(normalizedPath),
+                    contentBase64: (res.stdout || Buffer.alloc(0)).toString("base64"),
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
     }
 
     async saveStack(server : DockgeServer, name : unknown, composeYAML : unknown, composeENV : unknown, isAdd : unknown) : Promise<Stack> {
@@ -670,6 +841,72 @@ export class DockerSocketHandler extends AgentSocketHandler {
         }
 
         return targetPath;
+    }
+
+    normalizeContainerPath(targetPath: string) {
+        const normalized = path.posix.normalize(targetPath.replace(/\\/g, "/"));
+        if (!normalized || normalized === ".") {
+            return "/";
+        }
+        if (normalized.startsWith("/")) {
+            return normalized;
+        }
+        return `/${normalized.replace(/^\/+/, "")}`;
+    }
+
+    async resolveServiceContainer(server: DockgeServer, stackName: string, serviceName: string, containerID: string) {
+        const stack = await Stack.getStack(server, stackName, true);
+        const containers = await stack.getServiceContainers(serviceName);
+
+        if (containers.length === 0) {
+            throw new ValidationError("No running container found for this service.");
+        }
+
+        const match = containers.find((container) => container.id === containerID || container.name === containerID);
+        if (!match) {
+            throw new ValidationError("Container not found for this service.");
+        }
+
+        return match.name;
+    }
+
+    async execContainerShell(server: DockgeServer, containerName: string, script: string, scriptArgs: string[] = [], options: {
+        stdin?: Buffer,
+        interactive?: boolean,
+    } = {}) {
+        const shells = [ "sh", "bash" ];
+        let lastError: unknown;
+
+        for (const shell of shells) {
+            try {
+                const args = [
+                    "exec",
+                    ...(options.interactive ? [ "-i" ] : []),
+                    containerName,
+                    shell,
+                    "-lc",
+                    script,
+                    "dockge",
+                    ...scriptArgs,
+                ];
+                const child = await spawnDocker(server, args);
+
+                if (options.stdin) {
+                    const childProcess = child as typeof child & {
+                        stdin?: {
+                            end: (input?: Buffer) => void,
+                        },
+                    };
+                    childProcess.stdin?.end(options.stdin);
+                }
+
+                return await child;
+            } catch (e) {
+                lastError = e;
+            }
+        }
+
+        throw lastError;
     }
 
     async getDockerImages(server : DockgeServer) {

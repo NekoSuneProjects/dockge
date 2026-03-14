@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import childProcessAsync from "promisify-child-process";
 import { DockgeServer } from "./dockge-server";
 import { Settings } from "./settings";
@@ -14,6 +15,13 @@ export interface DockerExecCommand {
     args: string[];
     cwd?: string;
 }
+
+const COMMON_DOCKER_BINARIES = [
+    process.env.DOCKGE_DOCKER_PATH || "",
+    "docker",
+    "/usr/bin/docker",
+    "/usr/local/bin/docker",
+];
 
 export async function getDockerExecutionSettings(server: DockgeServer): Promise<DockerExecutionSettings> {
     const mode = await Settings.get("dockerExecutionMode");
@@ -53,8 +61,10 @@ export async function buildDockerCommand(server: DockgeServer, dockerArgs: strin
         };
     }
 
+    const dockerBinary = resolveDockerBinary();
+
     return {
-        file: "docker",
+        file: dockerBinary,
         args: dockerArgs,
         cwd,
     };
@@ -62,10 +72,17 @@ export async function buildDockerCommand(server: DockgeServer, dockerArgs: strin
 
 export async function spawnDocker(server: DockgeServer, dockerArgs: string[], cwd?: string, extraOptions: Record<string, unknown> = {}) {
     const command = await buildDockerCommand(server, dockerArgs, cwd);
-    return await childProcessAsync.spawn(command.file, command.args, {
-        cwd: command.cwd,
-        ...extraOptions,
-    });
+    try {
+        return await childProcessAsync.spawn(command.file, command.args, {
+            cwd: command.cwd,
+            ...extraOptions,
+        });
+    } catch (e) {
+        if (e instanceof Error && "code" in e && e.code === "ENOENT") {
+            throw new Error("Docker CLI was not found inside the Dockge runtime. Rebuild or update the image, or set DOCKGE_DOCKER_PATH to the docker binary.");
+        }
+        throw e;
+    }
 }
 
 export function toWslPath(inputPath: string) {
@@ -105,4 +122,25 @@ export async function buildDockerConsoleCommand(server: DockgeServer): Promise<D
         args: [],
         cwd: server.stacksDir,
     };
+}
+
+function resolveDockerBinary() {
+    for (const candidate of COMMON_DOCKER_BINARIES) {
+        if (!candidate) {
+            continue;
+        }
+
+        if (candidate === "docker") {
+            if (commandExistsSync(candidate)) {
+                return candidate;
+            }
+            continue;
+        }
+
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+
+    return "docker";
 }

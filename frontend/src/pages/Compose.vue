@@ -168,7 +168,10 @@
                             style="height: 315px;"
                         ></Terminal>
 
-                        <h4 class="mb-3 mt-4">Files</h4>
+                        <h4 class="mb-3 mt-4">Stack Files</h4>
+                        <div class="text-muted small mb-3">
+                            These are the host stack files. Use the container service "Files" button to browse files inside a running container.
+                        </div>
                         <StackFiles :stack-name="stack.name" :endpoint="endpoint" />
                     </div>
                 </div>

@@ -53,6 +53,10 @@
                             <font-awesome-icon icon="terminal" />
                             Bash
                         </router-link>
+                        <router-link class="btn btn-normal btn-sm" :to="filesRouteLink">
+                            <font-awesome-icon icon="folder-open" />
+                            Files
+                        </router-link>
                     </div>
                     <router-link v-else class="btn btn-normal" :to="terminalRouteLink" disabled="">
                         <font-awesome-icon icon="terminal" />
@@ -260,6 +264,27 @@ export default defineComponent({
                     },
                 };
             }
+        },
+
+        filesRouteLink() {
+            if (this.endpoint) {
+                return {
+                    name: "containerFilesEndpoint",
+                    params: {
+                        endpoint: this.endpoint,
+                        stackName: this.stackName,
+                        serviceName: this.name,
+                    },
+                };
+            }
+
+            return {
+                name: "containerFiles",
+                params: {
+                    stackName: this.stackName,
+                    serviceName: this.name,
+                },
+            };
         },
 
         endpoint() {
