@@ -91,6 +91,10 @@ cd /opt/dockge
 docker compose pull && docker compose up -d
 ```
 
+## Local Changelog
+
+This repo includes a local feature changelog at [CHANGELOG.md](./CHANGELOG.md) for the custom additions made here.
+
 ## Screenshots
 
 ![](https://github.com/louislam/dockge/assets/1336778/e7ff0222-af2e-405c-b533-4eab04791b40)

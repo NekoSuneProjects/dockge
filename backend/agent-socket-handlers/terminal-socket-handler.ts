@@ -5,6 +5,7 @@ import { InteractiveTerminal, MainTerminal, Terminal } from "../terminal";
 import { Stack } from "../stack";
 import { AgentSocketHandler } from "../agent-socket-handler";
 import { AgentSocket } from "../../common/agent-socket";
+import { requireAdmin, requireStackAccess } from "../auth";
 
 export class TerminalSocketHandler extends AgentSocketHandler {
     create(socket : DockgeSocket, server : DockgeServer, agentSocket : AgentSocket) {
@@ -37,6 +38,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
         agentSocket.on("mainTerminal", async (terminalName : unknown, callback) => {
             try {
                 checkLogin(socket);
+                await requireAdmin(socket);
 
                 // Throw an error if console is not enabled
                 if (!server.config.enableConsole) {
@@ -55,7 +57,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
                 let terminal = Terminal.getTerminal(terminalName);
 
                 if (!terminal) {
-                    terminal = new MainTerminal(server, terminalName);
+                    terminal = await MainTerminal.create(server, terminalName);
                     terminal.rows = 50;
                     log.debug("mainTerminal", "Terminal created");
                 }
@@ -75,6 +77,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
         agentSocket.on("checkMainTerminal", async (callback) => {
             try {
                 checkLogin(socket);
+                await requireAdmin(socket);
                 callbackResult({
                     ok: server.config.enableConsole,
                 }, callback);
@@ -102,6 +105,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
 
                 log.debug("interactiveTerminal", "Stack name: " + stackName);
                 log.debug("interactiveTerminal", "Service name: " + serviceName);
+                await requireStackAccess(socket, stackName, socket.endpoint);
 
                 // Get stack
                 const stack = await Stack.getStack(server, stackName);
@@ -153,6 +157,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
                 if (typeof(stackName) !== "string") {
                     throw new ValidationError("Stack name must be a string.");
                 }
+                await requireStackAccess(socket, stackName, socket.endpoint);
 
                 const stack = await Stack.getStack(server, stackName);
                 await stack.leaveCombinedTerminal(socket);

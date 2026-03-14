@@ -12,13 +12,12 @@ import {
     CREATED_STACK,
     EXITED, getCombinedTerminalName,
     getComposeTerminalName, getContainerExecTerminalName,
-    PROGRESS_TERMINAL_ROWS,
     RUNNING, TERMINAL_ROWS,
     UNKNOWN
 } from "../common/util-common";
 import { InteractiveTerminal, Terminal } from "./terminal";
-import childProcessAsync from "promisify-child-process";
 import { Settings } from "./settings";
+import { buildDockerCommand, spawnDocker } from "./docker-cli";
 
 export class Stack {
 
@@ -93,8 +92,7 @@ export class Stack {
      * Get the status of the stack from `docker compose ps --format json`
      */
     async ps() : Promise<object> {
-        let res = await childProcessAsync.spawn("docker", this.getComposeOptions("ps", "--format", "json"), {
-            cwd: this.path,
+        let res = await spawnDocker(this.server, this.getComposeOptions("ps", "--format", "json"), this.fullPath, {
             encoding: "utf-8",
         });
         if (!res.stdout) {
@@ -208,7 +206,8 @@ export class Stack {
 
     async deploy(socket : DockgeSocket) : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--remove-orphans"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("up", "-d", "--remove-orphans"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to deploy, please check the terminal output for more information.");
         }
@@ -217,7 +216,8 @@ export class Stack {
 
     async delete(socket: DockgeSocket) : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("down", "--remove-orphans"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("down", "--remove-orphans"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to delete, please check the terminal output for more information.");
         }
@@ -232,7 +232,7 @@ export class Stack {
     }
 
     async updateStatus() {
-        let statusList = await Stack.getStatusList();
+        let statusList = await Stack.getStatusList(this.server);
         let status = statusList.get(this.name);
 
         if (status) {
@@ -301,7 +301,7 @@ export class Stack {
         }
 
         // Get status from docker compose ls
-        let res = await childProcessAsync.spawn("docker", [ "compose", "ls", "--all", "--format", "json" ], {
+        let res = await spawnDocker(server, [ "compose", "ls", "--all", "--format", "json" ], undefined, {
             encoding: "utf-8",
         });
 
@@ -335,10 +335,10 @@ export class Stack {
      * Get the status list, it will be used to update the status of the stacks
      * Not all status will be returned, only the stack that is deployed or created to `docker compose` will be returned
      */
-    static async getStatusList() : Promise<Map<string, number>> {
+    static async getStatusList(server : DockgeServer) : Promise<Map<string, number>> {
         let statusList = new Map<string, number>();
 
-        let res = await childProcessAsync.spawn("docker", [ "compose", "ls", "--all", "--format", "json" ], {
+        let res = await spawnDocker(server, [ "compose", "ls", "--all", "--format", "json" ], undefined, {
             encoding: "utf-8",
         });
 
@@ -422,7 +422,8 @@ export class Stack {
 
     async start(socket: DockgeSocket) {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--remove-orphans"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("up", "-d", "--remove-orphans"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to start, please check the terminal output for more information.");
         }
@@ -431,7 +432,8 @@ export class Stack {
 
     async stop(socket: DockgeSocket) : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("stop"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("stop"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to stop, please check the terminal output for more information.");
         }
@@ -440,16 +442,30 @@ export class Stack {
 
     async restart(socket: DockgeSocket) : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("restart"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("restart"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to restart, please check the terminal output for more information.");
         }
         return exitCode;
     }
 
+    async serviceAction(socket: DockgeSocket, serviceName: string, action: "start" | "stop" | "restart") : Promise<number> {
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions(action, serviceName), this.fullPath);
+        const exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
+
+        if (exitCode !== 0) {
+            throw new Error(`Failed to ${action} service ${serviceName}, please check the terminal output for more information.`);
+        }
+
+        return exitCode;
+    }
+
     async down(socket: DockgeSocket) : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("down"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("down"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to down, please check the terminal output for more information.");
         }
@@ -458,7 +474,8 @@ export class Stack {
 
     async update(socket: DockgeSocket) {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
-        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("pull"), this.path);
+        const pullCommand = await buildDockerCommand(this.server, this.getComposeOptions("pull"), this.fullPath);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, pullCommand.file, pullCommand.args, pullCommand.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to pull, please check the terminal output for more information.");
         }
@@ -470,7 +487,8 @@ export class Stack {
             return exitCode;
         }
 
-        exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", this.getComposeOptions("up", "-d", "--remove-orphans"), this.path);
+        const upCommand = await buildDockerCommand(this.server, this.getComposeOptions("up", "-d", "--remove-orphans"), this.fullPath);
+        exitCode = await Terminal.exec(this.server, socket, terminalName, upCommand.file, upCommand.args, upCommand.cwd || this.fullPath);
         if (exitCode !== 0) {
             throw new Error("Failed to restart, please check the terminal output for more information.");
         }
@@ -479,7 +497,8 @@ export class Stack {
 
     async joinCombinedTerminal(socket: DockgeSocket) {
         const terminalName = getCombinedTerminalName(socket.endpoint, this.name);
-        const terminal = Terminal.getOrCreateTerminal(this.server, terminalName, "docker", this.getComposeOptions("logs", "-f", "--tail", "100"), this.path);
+        const command = await buildDockerCommand(this.server, this.getComposeOptions("logs", "-f", "--tail", "100"), this.fullPath);
+        const terminal = Terminal.getOrCreateTerminal(this.server, terminalName, command.file, command.args, command.cwd || this.fullPath);
         terminal.enableKeepAlive = true;
         terminal.rows = COMBINED_TERMINAL_ROWS;
         terminal.cols = COMBINED_TERMINAL_COLS;
@@ -500,7 +519,8 @@ export class Stack {
         let terminal = Terminal.getTerminal(terminalName);
 
         if (!terminal) {
-            terminal = new InteractiveTerminal(this.server, terminalName, "docker", this.getComposeOptions("exec", serviceName, shell), this.path);
+            const command = await buildDockerCommand(this.server, this.getComposeOptions("exec", serviceName, shell), this.fullPath);
+            terminal = new InteractiveTerminal(this.server, terminalName, command.file, command.args, command.cwd || this.fullPath);
             terminal.rows = TERMINAL_ROWS;
             log.debug("joinContainerTerminal", "Terminal created");
         }
@@ -513,8 +533,7 @@ export class Stack {
         let statusList = new Map<string, { state: string, ports: string[] }>();
 
         try {
-            let res = await childProcessAsync.spawn("docker", this.getComposeOptions("ps", "--format", "json"), {
-                cwd: this.path,
+            let res = await spawnDocker(this.server, this.getComposeOptions("ps", "--format", "json"), this.fullPath, {
                 encoding: "utf-8",
             });
 
@@ -552,4 +571,207 @@ export class Stack {
         }
 
     }
+
+    async getResourceStatsList() {
+        const statsByService = new Map<string, {
+            cpuPercent: string,
+            memoryUsage: string,
+            memoryPercent: string,
+            netIO: string,
+            blockIO: string,
+            pids: string,
+            containers: number,
+        }>();
+
+        try {
+            const psRes = await spawnDocker(this.server, this.getComposeOptions("ps", "--format", "json"), this.fullPath, {
+                encoding: "utf-8",
+            });
+
+            if (!psRes.stdout) {
+                return statsByService;
+            }
+
+            const nameToService = new Map<string, string>();
+            for (const line of psRes.stdout.toString().split("\n")) {
+                if (!line.trim()) {
+                    continue;
+                }
+
+                try {
+                    const obj = JSON.parse(line) as Record<string, string>;
+                    if (obj.Name && obj.Service) {
+                        nameToService.set(obj.Name, obj.Service);
+                    }
+                } catch (e) {
+                    log.debug("getResourceStatsList", `Failed to parse compose ps line: ${e instanceof Error ? e.message : "unknown error"}`);
+                }
+            }
+
+            if (nameToService.size === 0) {
+                return statsByService;
+            }
+
+            const statsRes = await spawnDocker(this.server, [
+                "stats",
+                "--no-stream",
+                "--format",
+                "{{json .}}",
+                ...Array.from(nameToService.keys()),
+            ], undefined, {
+                encoding: "utf-8",
+            });
+
+            const aggregate = new Map<string, {
+                cpuPercentTotal: number,
+                memoryUsedTotal: number,
+                memoryLimitTotal: number,
+                memoryPercentTotal: number,
+                netRxTotal: number,
+                netTxTotal: number,
+                blockReadTotal: number,
+                blockWriteTotal: number,
+                pidsTotal: number,
+                containers: number,
+            }>();
+
+            for (const line of (statsRes.stdout?.toString() || "").split("\n")) {
+                if (!line.trim()) {
+                    continue;
+                }
+
+                try {
+                    const obj = JSON.parse(line) as Record<string, string>;
+                    const containerName = obj.Name || obj.Container;
+                    const serviceName = containerName ? nameToService.get(containerName) : undefined;
+
+                    if (!serviceName) {
+                        continue;
+                    }
+
+                    const memoryUsage = parseUsagePair(obj.MemUsage);
+                    const netIO = parseUsagePair(obj.NetIO);
+                    const blockIO = parseUsagePair(obj.BlockIO);
+
+                    const current = aggregate.get(serviceName) || {
+                        cpuPercentTotal: 0,
+                        memoryUsedTotal: 0,
+                        memoryLimitTotal: 0,
+                        memoryPercentTotal: 0,
+                        netRxTotal: 0,
+                        netTxTotal: 0,
+                        blockReadTotal: 0,
+                        blockWriteTotal: 0,
+                        pidsTotal: 0,
+                        containers: 0,
+                    };
+
+                    current.cpuPercentTotal += parsePercent(obj.CPUPerc);
+                    current.memoryUsedTotal += memoryUsage[0];
+                    current.memoryLimitTotal += memoryUsage[1];
+                    current.memoryPercentTotal += parsePercent(obj.MemPerc);
+                    current.netRxTotal += netIO[0];
+                    current.netTxTotal += netIO[1];
+                    current.blockReadTotal += blockIO[0];
+                    current.blockWriteTotal += blockIO[1];
+                    current.pidsTotal += Number(obj.PIDs || "0") || 0;
+                    current.containers += 1;
+
+                    aggregate.set(serviceName, current);
+                } catch (e) {
+                    log.debug("getResourceStatsList", `Failed to parse docker stats line: ${e instanceof Error ? e.message : "unknown error"}`);
+                }
+            }
+
+            for (const [ serviceName, item ] of aggregate) {
+                const memoryPercent = item.memoryLimitTotal > 0
+                    ? (item.memoryUsedTotal / item.memoryLimitTotal) * 100
+                    : item.memoryPercentTotal;
+
+                statsByService.set(serviceName, {
+                    cpuPercent: `${item.cpuPercentTotal.toFixed(1)}%`,
+                    memoryUsage: `${formatDockerBytes(item.memoryUsedTotal)} / ${item.memoryLimitTotal > 0 ? formatDockerBytes(item.memoryLimitTotal) : "N/A"}`,
+                    memoryPercent: `${memoryPercent.toFixed(1)}%`,
+                    netIO: `${formatDockerBytes(item.netRxTotal)} / ${formatDockerBytes(item.netTxTotal)}`,
+                    blockIO: `${formatDockerBytes(item.blockReadTotal)} / ${formatDockerBytes(item.blockWriteTotal)}`,
+                    pids: String(item.pidsTotal),
+                    containers: item.containers,
+                });
+            }
+
+            return statsByService;
+        } catch (e) {
+            log.error("getResourceStatsList", e);
+            return statsByService;
+        }
+    }
+}
+
+function parsePercent(value?: string) {
+    if (!value) {
+        return 0;
+    }
+    return Number.parseFloat(value.replace("%", "").trim()) || 0;
+}
+
+function parseUsagePair(value?: string) {
+    if (!value) {
+        return [ 0, 0 ];
+    }
+
+    const [ left, right ] = value.split(/\s*\/\s*/);
+    return [ parseDockerBytes(left), parseDockerBytes(right) ];
+}
+
+function parseDockerBytes(value?: string) {
+    if (!value) {
+        return 0;
+    }
+
+    const trimmed = value.trim();
+    const match = trimmed.match(/^([\d.]+)\s*([a-zA-Z]+)?$/);
+    if (!match) {
+        return 0;
+    }
+
+    const amount = Number.parseFloat(match[1]);
+    const unit = (match[2] || "B").toUpperCase();
+
+    if (Number.isNaN(amount)) {
+        return 0;
+    }
+
+    const units: Record<string, number> = {
+        B: 1,
+        KB: 1000,
+        KIB: 1024,
+        MB: 1000 ** 2,
+        MIB: 1024 ** 2,
+        GB: 1000 ** 3,
+        GIB: 1024 ** 3,
+        TB: 1000 ** 4,
+        TIB: 1024 ** 4,
+        PB: 1000 ** 5,
+        PIB: 1024 ** 5,
+    };
+
+    return amount * (units[unit] || 1);
+}
+
+function formatDockerBytes(value: number) {
+    if (!Number.isFinite(value) || value <= 0) {
+        return "0 B";
+    }
+
+    const units = [ "B", "KiB", "MiB", "GiB", "TiB" ];
+    let size = value;
+    let index = 0;
+
+    while (size >= 1024 && index < units.length - 1) {
+        size /= 1024;
+        index += 1;
+    }
+
+    const precision = index === 0 ? 0 : 1;
+    return `${size.toFixed(precision)} ${units[index]}`;
 }

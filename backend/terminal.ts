@@ -1,5 +1,4 @@
 import { DockgeServer } from "./dockge-server";
-import * as os from "node:os";
 import * as pty from "@homebridge/node-pty-prebuilt-multiarch";
 import { LimitQueue } from "./utils/limit-queue";
 import { DockgeSocket } from "./util-server";
@@ -8,8 +7,8 @@ import {
     TERMINAL_COLS,
     TERMINAL_ROWS
 } from "../common/util-common";
-import { sync as commandExistsSync } from "command-exists";
 import { log } from "./log";
+import { buildDockerConsoleCommand } from "./docker-cli";
 
 /**
  * Terminal for running commands, no user interaction
@@ -204,6 +203,21 @@ export class Terminal {
         this.ptyProcess?.write("\x03");
     }
 
+    cancel() {
+        clearInterval(this.keepAliveInterval);
+        this.ptyProcess?.write("\x03");
+
+        setTimeout(() => {
+            try {
+                this.ptyProcess?.kill();
+            } catch (e) {
+                if (e instanceof Error) {
+                    log.debug("Terminal", "Failed to kill terminal: " + e.message);
+                }
+            }
+        }, 3000);
+    }
+
     /**
      * Get a running and non-exited terminal
      * @param name
@@ -246,6 +260,15 @@ export class Terminal {
     public static getTerminalCount() {
         return Terminal.terminalMap.size;
     }
+
+    public static cancel(name : string) {
+        const terminal = Terminal.getTerminal(name);
+        if (!terminal) {
+            return false;
+        }
+        terminal.cancel();
+        return true;
+    }
 }
 
 /**
@@ -267,27 +290,20 @@ export class InteractiveTerminal extends Terminal {
  * User interactive terminal that use bash or powershell with limited commands such as docker, ls, cd, dir
  */
 export class MainTerminal extends InteractiveTerminal {
-    constructor(server : DockgeServer, name : string) {
-        let shell;
-
+    constructor(server : DockgeServer, name : string, file : string, args : string[], cwd : string) {
         // Throw an error if console is not enabled
         if (!server.config.enableConsole) {
             throw new Error("Console is not enabled.");
         }
-
-        if (os.platform() === "win32") {
-            if (commandExistsSync("pwsh.exe")) {
-                shell = "pwsh.exe";
-            } else {
-                shell = "powershell.exe";
-            }
-        } else {
-            shell = "bash";
-        }
-        super(server, name, shell, [], server.stacksDir);
+        super(server, name, file, args, cwd);
     }
 
     public write(input : string) {
         super.write(input);
+    }
+
+    static async create(server : DockgeServer, name : string) {
+        const command = await buildDockerConsoleCommand(server);
+        return new MainTerminal(server, name, command.file, command.args, command.cwd || server.stacksDir);
     }
 }

@@ -29,6 +29,7 @@ export default defineComponent({
             loggedIn: false,
             allowLoginDialog: false,
             username: null,
+            sessionUser: null,
             composeTemplate: "",
 
             stackList: {},
@@ -48,6 +49,13 @@ export default defineComponent({
         };
     },
     computed: {
+        isAdmin() {
+            return this.sessionUser?.role === "admin";
+        },
+
+        isOwner() {
+            return this.sessionUser?.owner === true;
+        },
 
         agentCount() {
             return Object.keys(this.agentList).length;
@@ -122,7 +130,13 @@ export default defineComponent({
         },
     },
     created() {
+        window.addEventListener("message", this.handleOAuthMessage);
+        window.addEventListener("storage", this.handleOAuthStorage);
         this.initSocketIO();
+    },
+    beforeUnmount() {
+        window.removeEventListener("message", this.handleOAuthMessage);
+        window.removeEventListener("storage", this.handleOAuthStorage);
     },
     mounted() {
         return;
@@ -220,6 +234,13 @@ export default defineComponent({
 
             socket.on("info", (info) => {
                 this.info = info;
+            });
+
+            socket.on("session", (res) => {
+                if (res.ok) {
+                    this.sessionUser = res.user;
+                    this.username = res.user.username;
+                }
             });
 
             socket.on("autoLogin", () => {
@@ -341,6 +362,7 @@ export default defineComponent({
                     this.socketIO.token = res.token;
                     this.loggedIn = true;
                     this.username = this.getJWTPayload()?.username;
+                    this.getSocket().emit("getSession", () => {});
 
                     this.afterLogin();
 
@@ -366,6 +388,7 @@ export default defineComponent({
                 } else {
                     this.loggedIn = true;
                     this.username = this.getJWTPayload()?.username;
+                    this.getSocket().emit("getSession", () => {});
                     this.afterLogin();
                 }
             });
@@ -381,6 +404,7 @@ export default defineComponent({
             this.socketIO.token = null;
             this.loggedIn = false;
             this.username = null;
+            this.sessionUser = null;
             this.clearData();
         },
 
@@ -393,6 +417,35 @@ export default defineComponent({
 
         afterLogin() {
 
+        },
+
+        startOAuthLogin(providerID : string) {
+            const popup = window.open(`/auth/oauth/start/${providerID}`, "dockge-oauth", "width=640,height=760");
+            if (!popup) {
+                location.href = `/auth/oauth/start/${providerID}`;
+            }
+        },
+
+        handleOAuthMessage(event : MessageEvent) {
+            if (event.origin !== window.location.origin) {
+                return;
+            }
+            if (event.data?.type !== "dockge-oauth" || !event.data.token) {
+                return;
+            }
+            this.storage().token = event.data.token;
+            this.socketIO.token = event.data.token;
+            this.loginByToken(event.data.token);
+        },
+
+        handleOAuthStorage(event : StorageEvent) {
+            if (event.key !== "dockge-oauth-token" || !event.newValue) {
+                return;
+            }
+            localStorage.removeItem("dockge-oauth-token");
+            this.storage().token = event.newValue;
+            this.socketIO.token = event.newValue;
+            this.loginByToken(event.newValue);
         },
 
         bindTerminal(endpoint : string, terminalName : string, terminal : Terminal) {

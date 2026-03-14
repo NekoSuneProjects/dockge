@@ -57,6 +57,29 @@
                 <div class="form-text"></div>
             </div>
 
+            <div class="mb-4">
+                <label class="form-label" for="dockerExecutionMode">
+                    Docker Runtime Mode
+                </label>
+                <select id="dockerExecutionMode" v-model="settings.dockerExecutionMode" class="form-select">
+                    <option value="native">Native Docker / Docker Desktop</option>
+                    <option value="wsl">Windows WSL2 docker</option>
+                </select>
+                <div class="form-text">
+                    Use `native` for Docker Desktop on Windows. Use `wsl` if Docker/Compose is only available inside a WSL2 distro.
+                </div>
+            </div>
+
+            <div v-if="settings.dockerExecutionMode === 'wsl'" class="mb-4">
+                <label class="form-label" for="dockerWslDistro">
+                    WSL2 Distro
+                </label>
+                <input id="dockerWslDistro" v-model="settings.dockerWslDistro" class="form-control" placeholder="Ubuntu-24.04" />
+                <div class="form-text">
+                    Leave blank to use the default WSL distro.
+                </div>
+            </div>
+
             <!-- Save Button -->
             <div>
                 <button class="btn btn-primary" type="submit">

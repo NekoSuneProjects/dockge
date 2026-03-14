@@ -16,6 +16,9 @@ import General from "./components/settings/General.vue";
 const Security = () => import("./components/settings/Security.vue");
 const GlobalEnv = () => import("./components/settings/GlobalEnv.vue");
 import About from "./components/settings/About.vue";
+const UsersAdmin = () => import("./components/settings/UsersAdmin.vue");
+const OAuthAdmin = () => import("./components/settings/OAuthAdmin.vue");
+const DockerAdmin = () => import("./components/settings/DockerAdmin.vue");
 
 const routes = [
     {
@@ -86,6 +89,18 @@ const routes = [
                             {
                                 path: "about",
                                 component: About,
+                            },
+                            {
+                                path: "users",
+                                component: UsersAdmin,
+                            },
+                            {
+                                path: "oauth",
+                                component: OAuthAdmin,
+                            },
+                            {
+                                path: "docker",
+                                component: DockerAdmin,
                             },
                         ]
                     },

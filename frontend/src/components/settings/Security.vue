@@ -2,7 +2,7 @@
     <div>
         <div v-if="settingsLoaded" class="my-4">
             <!-- Change Password -->
-            <template v-if="!settings.disableAuth">
+            <template v-if="!settings.disableAuth && $root.sessionUser?.authProvider === 'local'">
                 <p>
                     {{ $t("Current User") }}: <strong>{{ $root.username }}</strong>
                     <button v-if="! settings.disableAuth" id="logout-btn" class="btn btn-danger ms-4 me-2 mb-2" @click="$root.logout">{{ $t("Logout") }}</button>
@@ -80,7 +80,7 @@
                 </div>
             </div>
 
-            <div class="my-4">
+            <div v-if="!settings.readonly" class="my-4">
                 <!-- Advanced -->
                 <h5 class="my-4 settings-subheading">{{ $t("Advanced") }}</h5>
 
@@ -88,6 +88,10 @@
                     <button v-if="settings.disableAuth" id="enableAuth-btn" class="btn btn-outline-primary me-2 mb-2" @click="enableAuth">{{ $t("Enable Auth") }}</button>
                     <button v-if="! settings.disableAuth" id="disableAuth-btn" class="btn btn-primary me-2 mb-2" @click="confirmDisableAuth">{{ $t("Disable Auth") }}</button>
                 </div>
+            </div>
+
+            <div v-if="settings.readonly && $root.sessionUser?.authProvider !== 'local'" class="alert alert-secondary">
+                Account security for delegated users is managed by an administrator or your OAuth provider.
             </div>
         </div>
 

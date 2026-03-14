@@ -3,6 +3,7 @@ import { DockgeServer } from "../dockge-server";
 import { log } from "../log";
 import { callbackError, callbackResult, checkLogin, DockgeSocket } from "../util-server";
 import { LooseObject } from "../../common/util-common";
+import { requireAdmin } from "../auth";
 
 export class ManageAgentSocketHandler extends SocketHandler {
 
@@ -12,6 +13,7 @@ export class ManageAgentSocketHandler extends SocketHandler {
             try {
                 log.debug("manage-agent-socket-handler", "addAgent");
                 checkLogin(socket);
+                await requireAdmin(socket);
 
                 if (typeof(requestData) !== "object") {
                     throw new Error("Data must be an object");
@@ -46,6 +48,7 @@ export class ManageAgentSocketHandler extends SocketHandler {
             try {
                 log.debug("manage-agent-socket-handler", "removeAgent");
                 checkLogin(socket);
+                await requireAdmin(socket);
 
                 if (typeof(url) !== "string") {
                     throw new Error("URL must be a string");

@@ -30,13 +30,15 @@ import { Stack } from "./stack";
 import { Cron } from "croner";
 import gracefulShutdown from "http-graceful-shutdown";
 import User from "./models/user";
-import childProcessAsync from "promisify-child-process";
 import { AgentManager } from "./agent-manager";
 import { AgentProxySocketHandler } from "./socket-handlers/agent-proxy-socket-handler";
 import { AgentSocketHandler } from "./agent-socket-handler";
 import { AgentSocket } from "../common/agent-socket";
 import { ManageAgentSocketHandler } from "./socket-handlers/manage-agent-socket-handler";
 import { Terminal } from "./terminal";
+import { getAccessibleStacks, isAdmin, SessionUser, sessionUserPayload } from "./auth";
+import { getOAuthProvidersForLogin } from "./oauth";
+import { spawnDocker } from "./docker-cli";
 
 export class DockgeServer {
     app : Express;
@@ -329,9 +331,18 @@ export class DockgeServer {
 
     async afterLogin(socket : DockgeSocket, user : User) {
         socket.userID = user.id;
+        socket.sessionUser = {
+            id: user.id,
+            username: user.username,
+            display_name: user.display_name || user.username,
+            role: user.role,
+            auth_provider: user.auth_provider,
+            owner: Boolean(user.owner),
+        } as SessionUser;
         socket.join(user.id.toString());
 
         this.sendInfo(socket);
+        this.sendSession(socket, user);
 
         try {
             this.sendStackList();
@@ -439,8 +450,40 @@ export class DockgeServer {
             latestVersion: latestVersionProperty,
             isContainer,
             primaryHostname: await Settings.get("primaryHostname"),
+            oauthProviders: await getOAuthProvidersForLogin(),
             //serverTimezone: await this.getTimezone(),
             //serverTimezoneOffset: this.getTimezoneOffset(),
+        });
+    }
+
+    sendSession(socket: DockgeSocket, user?: User | null) {
+        if (user) {
+            const sessionUser = {
+                id: user.id,
+                username: user.username,
+                display_name: user.display_name || user.username,
+                role: user.role,
+                auth_provider: user.auth_provider,
+                owner: Boolean(user.owner),
+            } as SessionUser;
+            socket.emit("session", {
+                ok: true,
+                user: sessionUserPayload(sessionUser),
+            });
+            return;
+        }
+
+        if (socket.sessionUser) {
+            socket.emit("session", {
+                ok: true,
+                user: sessionUserPayload(socket.sessionUser),
+            });
+            return;
+        }
+
+        socket.emit("session", {
+            ok: false,
+            user: null,
         });
     }
 
@@ -602,8 +645,17 @@ export class DockgeServer {
                 }
 
                 let map : Map<string, object> = new Map();
+                let allowedStacks : Set<string> | null = null;
+                const user = dockgeSocket.sessionUser;
+
+                if (user && !isAdmin(user)) {
+                    allowedStacks = await getAccessibleStacks(user.id, dockgeSocket.endpoint ?? "");
+                }
 
                 for (let [ stackName, stack ] of stackList) {
+                    if (allowedStacks && !allowedStacks.has(stackName)) {
+                        continue;
+                    }
                     map.set(stackName, stack.toSimpleJSON(dockgeSocket.endpoint));
                 }
 
@@ -617,7 +669,7 @@ export class DockgeServer {
     }
 
     async getDockerNetworkList() : Promise<string[]> {
-        let res = await childProcessAsync.spawn("docker", [ "network", "ls", "--format", "{{.Name}}" ], {
+        let res = await spawnDocker(this, [ "network", "ls", "--format", "{{.Name}}" ], undefined, {
             encoding: "utf-8",
         });
 

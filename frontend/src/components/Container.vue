@@ -13,10 +13,48 @@
                         <span class="badge me-1 bg-secondary">{{ parsePort(port).display }}</span>
                     </a>
                 </div>
+
+                <div v-if="!isEditMode && stats" class="resource-stats mt-3">
+                    <div><strong>CPU:</strong> {{ stats.cpuPercent }}</div>
+                    <div><strong>Memory:</strong> {{ stats.memoryUsage }} <span class="text-muted">({{ stats.memoryPercent }})</span></div>
+                    <div><strong>Network:</strong> {{ stats.netIO }}</div>
+                    <div><strong>Block I/O:</strong> {{ stats.blockIO }}</div>
+                    <div><strong>PIDs:</strong> {{ stats.pids }}<span v-if="stats.containers > 1" class="text-muted"> · {{ stats.containers }} containers</span></div>
+                </div>
             </div>
             <div class="col-5">
                 <div class="function">
-                    <router-link v-if="!isEditMode" class="btn btn-normal" :to="terminalRouteLink" disabled="">
+                    <div v-if="!isEditMode" class="container-actions">
+                        <button
+                            v-if="!isRunning"
+                            class="btn btn-primary btn-sm"
+                            :disabled="actionProcessing"
+                            @click="runAction('start')"
+                        >
+                            <font-awesome-icon icon="play" />
+                        </button>
+                        <button
+                            v-if="isRunning"
+                            class="btn btn-normal btn-sm"
+                            :disabled="actionProcessing"
+                            @click="runAction('stop')"
+                        >
+                            <font-awesome-icon icon="stop" />
+                        </button>
+                        <button
+                            class="btn btn-normal btn-sm"
+                            :disabled="actionProcessing"
+                            @click="runAction('restart')"
+                        >
+                            <font-awesome-icon icon="rotate" />
+                        </button>
+
+                        <router-link class="btn btn-normal btn-sm" :to="terminalRouteLink" disabled="">
+                            <font-awesome-icon icon="terminal" />
+                            Bash
+                        </router-link>
+                    </div>
+                    <router-link v-else class="btn btn-normal" :to="terminalRouteLink" disabled="">
                         <font-awesome-icon icon="terminal" />
                         Bash
                     </router-link>
@@ -163,6 +201,10 @@ export default defineComponent({
         ports: {
             type: Array,
             default: null
+        },
+        stats: {
+            type: Object,
+            default: null,
         }
     },
     emits: [
@@ -170,6 +212,7 @@ export default defineComponent({
     data() {
         return {
             showConfig: false,
+            actionProcessing: false,
         };
     },
     computed: {
@@ -190,6 +233,10 @@ export default defineComponent({
             } else {
                 return "bg-secondary";
             }
+        },
+
+        isRunning() {
+            return this.status === "running" || this.status === "healthy";
         },
 
         terminalRouteLink() {
@@ -277,6 +324,17 @@ export default defineComponent({
         }
     },
     methods: {
+        runAction(action) {
+            this.actionProcessing = true;
+            this.$root.emitAgent(this.endpoint, "stackServiceAction", this.stackName, this.name, action, (res) => {
+                this.actionProcessing = false;
+                this.$root.toastRes(res);
+
+                if (res.ok) {
+                    this.$parent.$parent.requestServiceStatus();
+                }
+            });
+        },
         parsePort(port) {
             if (this.stack.endpoint) {
                 return parseDockerPort(port, this.stack.primaryHostname);
@@ -311,6 +369,19 @@ export default defineComponent({
         width: 100%;
         align-items: center;
         justify-content: end;
+    }
+
+    .container-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: end;
+        gap: 0.4rem;
+    }
+
+    .resource-stats {
+        font-size: 0.85rem;
+        line-height: 1.45;
+        color: #5d656d;
     }
 }
 </style>

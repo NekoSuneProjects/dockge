@@ -54,6 +54,11 @@
                     </BDropdown>
                 </div>
 
+                <button v-if="processing && showProgressTerminal && stack.name" class="btn btn-warning" @click="cancelStackOperation">
+                    <font-awesome-icon icon="times" class="me-1" />
+                    Cancel Running Operation
+                </button>
+
                 <button v-if="isEditMode && !isAdd" class="btn btn-normal" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
                 <button v-if="!isEditMode" class="btn btn-danger" :disabled="processing" @click="showDeleteDialog = !showDeleteDialog">
                     <font-awesome-icon icon="trash" class="me-1" />
@@ -63,8 +68,8 @@
 
             <!-- URLs -->
             <div v-if="urls.length > 0" class="mb-3">
-                <a v-for="(url, index) in urls" :key="index" target="_blank" :href="url.url">
-                    <span class="badge bg-secondary me-2">{{ url.display }}</span>
+                <a v-for="(link, index) in urls" :key="index" target="_blank" :href="link.url">
+                    <span class="badge bg-secondary me-2">{{ link.display }}</span>
                 </a>
             </div>
 
@@ -98,8 +103,8 @@
                             <div class="mt-3">
                                 <label for="name" class="form-label">{{ $t("dockgeAgent") }}</label>
                                 <select v-model="stack.endpoint" class="form-select">
-                                    <option v-for="(agent, endpoint) in $root.agentList" :key="endpoint" :value="endpoint" :disabled="$root.agentStatusList[endpoint] != 'online'">
-                                        ({{ $root.agentStatusList[endpoint] }}) {{ (endpoint) ? endpoint : $t("currentEndpoint") }}
+                                    <option v-for="(agent, agentEndpoint) in $root.agentList" :key="agentEndpoint" :value="agentEndpoint" :disabled="$root.agentStatusList[agentEndpoint] != 'online'">
+                                        ({{ $root.agentStatusList[agentEndpoint] }}) {{ (agentEndpoint) ? agentEndpoint : $t("currentEndpoint") }}
                                     </option>
                                 </select>
                             </div>
@@ -130,6 +135,7 @@
                             :first="name === Object.keys(jsonConfig.services)[0]"
                             :status="serviceStatusList[name]?.state"
                             :ports="serviceStatusList[name]?.ports"
+                            :stats="resourceStatsList[name]"
                         />
                     </div>
 
@@ -161,6 +167,9 @@
                             :cols="combinedTerminalCols"
                             style="height: 315px;"
                         ></Terminal>
+
+                        <h4 class="mb-3 mt-4">Files</h4>
+                        <StackFiles :stack-name="stack.name" :endpoint="endpoint" />
                     </div>
                 </div>
                 <div class="col-lg-6">
@@ -264,6 +273,7 @@ import { BModal } from "bootstrap-vue-next";
 import NetworkInput from "../components/NetworkInput.vue";
 import dotenv from "dotenv";
 import { ref } from "vue";
+import StackFiles from "../components/StackFiles.vue";
 
 const template = `
 services:
@@ -282,6 +292,7 @@ let serviceStatusTimeout = null;
 export default {
     components: {
         NetworkInput,
+        StackFiles,
         FontAwesomeIcon,
         CodeMirror,
         BModal,
@@ -333,6 +344,7 @@ export default {
 
             },
             serviceStatusList: {},
+            resourceStatsList: {},
             isEditMode: false,
             submitted: false,
             showDeleteDialog: false,
@@ -526,8 +538,17 @@ export default {
                 if (res.ok) {
                     this.serviceStatusList = res.serviceStatusList;
                 }
+                this.requestResourceStats();
                 if (!this.stopServiceStatusTimeout) {
                     this.startServiceStatusTimeout();
+                }
+            });
+        },
+
+        requestResourceStats() {
+            this.$root.emitAgent(this.endpoint, "stackResourceStats", this.stack.name, (res) => {
+                if (res.ok) {
+                    this.resourceStatsList = res.stats;
                 }
             });
         },
@@ -550,6 +571,7 @@ export default {
             console.log("exitAction");
             this.stopServiceStatusTimeout = true;
             clearTimeout(serviceStatusTimeout);
+            this.resourceStatsList = {};
 
             // Leave Combined Terminal
             console.debug("leaveCombinedTerminal", this.endpoint, this.stack.name);
@@ -566,6 +588,7 @@ export default {
                 if (res.ok) {
                     this.stack = res.stack;
                     this.yamlCodeChange();
+                    this.requestResourceStats();
                     this.processing = false;
                     this.bindTerminal();
                 } else {
@@ -681,6 +704,18 @@ export default {
                 this.$root.toastRes(res);
                 if (res.ok) {
                     this.$router.push("/");
+                }
+            });
+        },
+
+        cancelStackOperation() {
+            if (!this.stack.name) {
+                return;
+            }
+            this.$root.emitAgent(this.endpoint, "cancelStackOperation", this.stack.name, (res) => {
+                this.$root.toastRes(res);
+                if (res.ok) {
+                    this.processing = false;
                 }
             });
         },

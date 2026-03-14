@@ -34,6 +34,17 @@
                     {{ $t("Login") }}
                 </button>
 
+                <button
+                    v-for="provider in ($root.info.oauthProviders || [])"
+                    :key="provider.id"
+                    class="w-100 btn btn-outline-secondary mt-2"
+                    type="button"
+                    :disabled="processing"
+                    @click="$root.startOAuthLogin(provider.id)"
+                >
+                    {{ provider.name }}
+                </button>
+
                 <div v-if="res && !res.ok" class="alert alert-danger mt-3" role="alert">
                     {{ $t(res.msg) }}
                 </div>

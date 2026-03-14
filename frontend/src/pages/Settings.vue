@@ -73,7 +73,7 @@ export default {
         },
 
         subMenus() {
-            return {
+            const subMenus = {
                 general: {
                     title: this.$t("general"),
                 },
@@ -90,6 +90,26 @@ export default {
                     title: this.$t("About"),
                 },
             };
+
+            if (this.$root.isAdmin) {
+                subMenus.users = {
+                    title: "Users",
+                };
+                subMenus.oauth = {
+                    title: "OAuth",
+                };
+                subMenus.docker = {
+                    title: "Docker",
+                };
+            }
+
+            if (!this.$root.isAdmin) {
+                delete subMenus.general;
+                delete subMenus.globalEnv;
+                delete subMenus.about;
+            }
+
+            return subMenus;
         },
     },
 
@@ -112,7 +132,7 @@ export default {
          */
         loadGeneralPage() {
             if (!this.currentPage && !this.$root.isMobile) {
-                this.$router.push("/settings/appearance");
+                this.$router.push(this.$root.isAdmin ? "/settings/appearance" : "/settings/security");
             }
         },
 

@@ -36,7 +36,10 @@ export class User extends BeanModel {
      */
     static createJWT(user : User, jwtSecret : string) {
         return jwt.sign({
+            id: user.id,
             username: user.username,
+            role: user.role,
+            authProvider: user.auth_provider,
             h: shake256(user.password, SHAKE256_LENGTH),
         }, jwtSecret);
     }
