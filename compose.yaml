@@ -13,7 +13,9 @@ services:
       # Intel / AMD / many iGPUs:
       # - /sys/class/drm:/sys/class/drm:ro
       # NVIDIA:
-      # - /proc/driver/nvidia:/proc/driver/nvidia:ro
+      # Do not mount into /proc inside the container. Docker blocks that.
+      # Mount it to a normal path instead:
+      # - /proc/driver/nvidia:/run/dockge-host/proc-driver-nvidia:ro
       # - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
         
       # If you want to use private registries, you need to share the auth file with Dockge:

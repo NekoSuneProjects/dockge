@@ -223,8 +223,11 @@ async function spawnFirstAvailable(commands: string[], args: string[]) {
 }
 
 function detectLinuxNvidiaFromProc(): GPUInfo[] {
-    const basePath = "/proc/driver/nvidia/gpus";
-    if (!fs.existsSync(basePath)) {
+    const basePath = firstExistingPath([
+        "/proc/driver/nvidia/gpus",
+        "/run/dockge-host/proc-driver-nvidia/gpus",
+    ]);
+    if (!basePath) {
         return [];
     }
 
@@ -250,8 +253,11 @@ function detectLinuxNvidiaFromProc(): GPUInfo[] {
 }
 
 function readLinuxNvidiaDriverVersion() {
-    const versionPath = "/proc/driver/nvidia/version";
-    if (!fs.existsSync(versionPath)) {
+    const versionPath = firstExistingPath([
+        "/proc/driver/nvidia/version",
+        "/run/dockge-host/proc-driver-nvidia/version",
+    ]);
+    if (!versionPath) {
         return undefined;
     }
 
@@ -356,4 +362,8 @@ function readLinuxModuleVersion(driverName?: string) {
 
     const version = safeReadTrim(`/sys/module/${driverName}/version`);
     return version || undefined;
+}
+
+function firstExistingPath(paths: string[]) {
+    return paths.find((filePath) => fs.existsSync(filePath));
 }

@@ -80,7 +80,7 @@ If Dockge itself runs in a container, GPU detection only works when the Dockge c
 For Linux hosts:
 
 - Intel / AMD: share `/dev/dri` and `/sys/class/drm`
-- NVIDIA: share `/proc/driver/nvidia` and `nvidia-smi` if present
+- NVIDIA: share `nvidia-smi` if present, and mount `/proc/driver/nvidia` to a normal container path, not into `/proc`
 
 Example additions for the `dockge` service:
 
@@ -89,7 +89,7 @@ services:
   dockge:
     volumes:
       - /sys/class/drm:/sys/class/drm:ro
-      - /proc/driver/nvidia:/proc/driver/nvidia:ro
+      - /proc/driver/nvidia:/run/dockge-host/proc-driver-nvidia:ro
       - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
     devices:
       - /dev/dri:/dev/dri
@@ -99,6 +99,7 @@ Notes:
 
 - `/dev/dri` is mainly useful for Intel and AMD GPUs, and some integrated GPUs.
 - `/proc/driver/nvidia` and `nvidia-smi` are mainly useful for NVIDIA GPUs.
+- Do not bind-mount host `/proc/driver/nvidia` into container `/proc/driver/nvidia`; Docker rejects mounts inside container `/proc`.
 - Uncomment only the mounts that exist on your host. If a path does not exist, Docker may fail to start the container.
 
 ### Advanced

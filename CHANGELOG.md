@@ -106,6 +106,7 @@
 - Linux NVIDIA GPU detection improvements:
   - checks common `nvidia-smi` binary paths
   - falls back to `/proc/driver/nvidia`
+  - supports safe containerized host proc mounts via `/run/dockge-host/proc-driver-nvidia`
   - falls back to `lspci` on common system paths
 - Linux Intel / AMD GPU detection improvements:
   - reads DRM sysfs data from `/sys/class/drm`
