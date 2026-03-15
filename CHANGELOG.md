@@ -95,6 +95,7 @@
   - image search and usage filters
   - container search and status filters
   - pagination for images and containers
+  - multi-select image removal
 - Official Dockge to fork SQLite upgrade compatibility support:
   - additive schema repair for missing fork tables and columns
   - preserves existing user data during upgrade
@@ -102,6 +103,15 @@
 - Docker CLI runtime detection improvements:
   - checks common docker binary paths
   - clearer error message when the container image is missing the Docker CLI
+- Linux NVIDIA GPU detection improvements:
+  - checks common `nvidia-smi` binary paths
+  - falls back to `/proc/driver/nvidia`
+  - falls back to `lspci` on common system paths
+- Linux Intel / AMD GPU detection improvements:
+  - reads DRM sysfs data from `/sys/class/drm`
+  - supports containerized detection better when `/dev/dri` and DRM paths are shared
+- Multi-GPU display improvements:
+  - node hardware UI now lists each detected GPU separately as `GPU 1`, `GPU 2`, and so on
 
 ### Changed
 
@@ -116,7 +126,9 @@
 - The quick install catalog was moved out of the dashboard into its own `Apps` page.
 - App installs now use a dedicated install flow page instead of only a modal.
 - The compose page now labels host-level file access as `Stack Files` to distinguish it from container file browsing.
+- The embedded host `Stack Files` panel was removed from the compose page in favor of the dedicated container file manager flow.
 - README now documents this repository as the NekoSuneVR fork of Dockge with active feature development and early-access positioning.
+- Dark-theme readability was improved for the profile dropdown and user/security settings forms.
 
 ### Notes
 

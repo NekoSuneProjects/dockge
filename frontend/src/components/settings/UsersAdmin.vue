@@ -182,6 +182,8 @@ export default {
 </script>
 
 <style scoped lang="scss">
+@import "../../styles/vars.scss";
+
 .user-row {
     padding: 0.75rem;
     border-radius: 0.75rem;
@@ -202,5 +204,45 @@ export default {
     display: flex;
     gap: 0.5rem;
     padding: 0.35rem 0;
+}
+
+.dark {
+    .user-row {
+        color: $dark-font-color;
+    }
+
+    .user-row.active,
+    .user-row:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .text-muted {
+        color: rgba(177, 184, 192, 0.82) !important;
+    }
+
+    .badge.bg-dark {
+        background: rgba(116, 194, 255, 0.18) !important;
+        color: #d7ecff !important;
+    }
+
+    .access-item {
+        color: $dark-font-color;
+    }
+
+    .alert-secondary {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: $dark-font-color;
+    }
+
+    .form-control,
+    .form-select {
+        color: $dark-font-color;
+        -webkit-text-fill-color: $dark-font-color;
+    }
+
+    .form-control::placeholder {
+        color: rgba(177, 184, 192, 0.55);
+    }
 }
 </style>

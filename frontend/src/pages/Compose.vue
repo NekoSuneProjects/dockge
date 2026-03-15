@@ -167,12 +167,6 @@
                             :cols="combinedTerminalCols"
                             style="height: 315px;"
                         ></Terminal>
-
-                        <h4 class="mb-3 mt-4">Stack Files</h4>
-                        <div class="text-muted small mb-3">
-                            These are the host stack files. Use the container service "Files" button to browse files inside a running container.
-                        </div>
-                        <StackFiles :stack-name="stack.name" :endpoint="endpoint" />
                     </div>
                 </div>
                 <div class="col-lg-6">
@@ -276,7 +270,6 @@ import { BModal } from "bootstrap-vue-next";
 import NetworkInput from "../components/NetworkInput.vue";
 import dotenv from "dotenv";
 import { ref } from "vue";
-import StackFiles from "../components/StackFiles.vue";
 
 const template = `
 services:
@@ -295,7 +288,6 @@ let serviceStatusTimeout = null;
 export default {
     components: {
         NetworkInput,
-        StackFiles,
         FontAwesomeIcon,
         CodeMirror,
         BModal,

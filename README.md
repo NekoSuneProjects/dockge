@@ -73,6 +73,34 @@ docker compose up -d
 
 Dockge is now running on http://localhost:5001
 
+### GPU Detection In Docker
+
+If Dockge itself runs in a container, GPU detection only works when the Dockge container can see the host GPU information.
+
+For Linux hosts:
+
+- Intel / AMD: share `/dev/dri` and `/sys/class/drm`
+- NVIDIA: share `/proc/driver/nvidia` and `nvidia-smi` if present
+
+Example additions for the `dockge` service:
+
+```yaml
+services:
+  dockge:
+    volumes:
+      - /sys/class/drm:/sys/class/drm:ro
+      - /proc/driver/nvidia:/proc/driver/nvidia:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+    devices:
+      - /dev/dri:/dev/dri
+```
+
+Notes:
+
+- `/dev/dri` is mainly useful for Intel and AMD GPUs, and some integrated GPUs.
+- `/proc/driver/nvidia` and `nvidia-smi` are mainly useful for NVIDIA GPUs.
+- Uncomment only the mounts that exist on your host. If a path does not exist, Docker may fail to start the container.
+
 ### Advanced
 
 If you want to store your stacks in another directory, you can generate your compose.yaml file by using the following URL with custom query strings.

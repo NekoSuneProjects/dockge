@@ -8,6 +8,13 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/app/data
+      # Optional GPU detection mounts for containerized Dockge on Linux hosts.
+      # Uncomment the lines that match your host if you want the web UI to detect GPUs reliably.
+      # Intel / AMD / many iGPUs:
+      # - /sys/class/drm:/sys/class/drm:ro
+      # NVIDIA:
+      # - /proc/driver/nvidia:/proc/driver/nvidia:ro
+      # - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
         
       # If you want to use private registries, you need to share the auth file with Dockge:
       # - /root/.docker/:/root/.docker
@@ -17,6 +24,10 @@ services:
       # ⚠️ 1. FULL path only. No relative path (MUST)
       # ⚠️ 2. Left Stacks Path === Right Stacks Path (MUST)
       - /opt/stacks:/opt/stacks
+    # Optional GPU device passthrough for containerized Dockge on Linux hosts.
+    # Uncomment if you want Dockge to inspect Intel / AMD render nodes directly.
+    # devices:
+    #   - /dev/dri:/dev/dri
     environment:
       # Tell Dockge where is your stacks directory
       - DOCKGE_STACKS_DIR=/opt/stacks

@@ -101,7 +101,14 @@
                                 <div><strong>CPU:</strong> {{ systemSpecs[endpoint].cpuModel }} · {{ systemSpecs[endpoint].cpuCores }} cores</div>
                                 <div><strong>RAM:</strong> {{ formatBytes(systemSpecs[endpoint].totalMemoryBytes) }}</div>
                                 <div v-if="systemSpecs[endpoint].gpus.length > 0">
-                                    <strong>GPU:</strong> {{ formatGPUList(systemSpecs[endpoint].gpus) }}
+                                    <div><strong>GPUs:</strong> {{ systemSpecs[endpoint].gpus.length }}</div>
+                                    <div
+                                        v-for="(gpu, gpuIndex) in systemSpecs[endpoint].gpus"
+                                        :key="`${endpoint}-gpu-${gpuIndex}`"
+                                        class="gpu-line"
+                                    >
+                                        <strong>GPU {{ gpuIndex + 1 }}:</strong> {{ formatGPU(gpu) }}
+                                    </div>
                                 </div>
                                 <div v-else>
                                     <strong>GPU:</strong> GPU not detected
@@ -348,6 +355,20 @@ export default {
             }).join(" | ");
         },
 
+        formatGPU(gpu) {
+            const details = [ gpu.name ];
+            if (gpu.vendor && !gpu.name?.toLowerCase().includes(String(gpu.vendor).toLowerCase())) {
+                details.push(gpu.vendor);
+            }
+            if (gpu.driverVersion) {
+                details.push(`driver ${gpu.driverVersion}`);
+            }
+            if (gpu.memoryMB) {
+                details.push(`${gpu.memoryMB} MB`);
+            }
+            return details.join(" - ");
+        },
+
         /**
          * Updates the displayed records when a new important heartbeat arrives.
          * @param {object} heartbeat - The heartbeat object received.
@@ -469,6 +490,10 @@ table {
 .agent-specs {
     font-size: 0.9rem;
     line-height: 1.45;
+}
+
+.gpu-line {
+    margin-top: 0.2rem;
 }
 
 .update-results {

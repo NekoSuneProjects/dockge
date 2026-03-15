@@ -274,6 +274,11 @@ main {
             color: $dark-font-color;
             border-color: $dark-border-color;
 
+            .text-muted,
+            .dropdown-item-text {
+                color: $dark-font-color !important;
+            }
+
             .dropdown-item {
                 color: $dark-font-color;
 

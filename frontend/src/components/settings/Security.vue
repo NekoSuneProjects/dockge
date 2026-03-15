@@ -207,3 +207,31 @@ export default {
     },
 };
 </script>
+
+<style scoped lang="scss">
+@import "../../styles/vars.scss";
+
+.dark {
+    .alert-secondary {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: $dark-font-color;
+    }
+
+    .form-control {
+        color: $dark-font-color;
+        -webkit-text-fill-color: $dark-font-color;
+    }
+
+    .form-control::placeholder {
+        color: rgba(177, 184, 192, 0.55);
+    }
+
+    .settings-subheading,
+    .form-label,
+    p,
+    strong {
+        color: $dark-font-color;
+    }
+}
+</style>

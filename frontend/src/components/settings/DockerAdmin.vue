@@ -10,6 +10,9 @@
                 </div>
                 <div class="toolbar-actions">
                     <button class="btn btn-normal" @click="loadImages">Refresh Images</button>
+                    <button class="btn btn-danger" :disabled="selectedImageIDs.length === 0 || removingSelected" @click="removeSelectedImages">
+                        {{ removingSelected ? "Removing..." : `Remove Selected (${selectedImageIDs.length})` }}
+                    </button>
                     <button class="btn btn-danger" @click="pruneImages">Prune Unused</button>
                     <button class="btn btn-normal" @click="loadContainers">Refresh Containers</button>
                 </div>
@@ -77,6 +80,20 @@
                 </div>
             </div>
 
+            <div v-if="filteredImages.length > 0" class="bulk-row mb-3">
+                <label class="bulk-check">
+                    <input
+                        :checked="allVisibleImagesSelected"
+                        type="checkbox"
+                        @change="toggleVisibleImages($event.target.checked)"
+                    >
+                    <span>Select all visible</span>
+                </label>
+                <div class="bulk-meta">
+                    {{ selectedImageIDs.length }} selected
+                </div>
+            </div>
+
             <div v-if="pagedImages.length === 0" class="empty-state">
                 No images matched this filter.
             </div>
@@ -84,6 +101,9 @@
             <div v-else class="item-grid">
                 <div v-for="image in pagedImages" :key="image.id" class="item-card">
                     <div class="item-top">
+                        <label class="card-check">
+                            <input v-model="selectedImageIDs" type="checkbox" :value="image.id">
+                        </label>
                         <div class="item-title-group">
                             <div class="item-title">{{ image.repository }}</div>
                             <div class="item-subtitle">:{{ image.tag }}</div>
@@ -218,6 +238,8 @@ export default {
         return {
             images: [],
             containers: [],
+            selectedImageIDs: [],
+            removingSelected: false,
             imageSearch: "",
             imageUsageFilter: "all",
             imagePage: 1,
@@ -273,6 +295,13 @@ export default {
         pagedImages() {
             const start = (this.imagePage - 1) * this.imagePerPage;
             return this.filteredImages.slice(start, start + this.imagePerPage);
+        },
+
+        allVisibleImagesSelected() {
+            if (this.pagedImages.length === 0) {
+                return false;
+            }
+            return this.pagedImages.every((image) => this.selectedImageIDs.includes(image.id));
         },
 
         filteredContainers() {
@@ -353,6 +382,7 @@ export default {
             this.$root.emitAgent("", "dockerImageList", (res) => {
                 if (res.ok) {
                     this.images = res.images;
+                    this.selectedImageIDs = this.selectedImageIDs.filter((id) => this.images.some((image) => image.id === id));
                 } else {
                     this.$root.toastRes(res);
                 }
@@ -370,9 +400,57 @@ export default {
             this.$root.emitAgent("", "removeDockerImage", imageID, (res) => {
                 this.$root.toastRes(res);
                 if (res.ok) {
+                    this.selectedImageIDs = this.selectedImageIDs.filter((id) => id !== imageID);
                     this.loadImages();
                 }
             });
+        },
+        async removeSelectedImages() {
+            if (this.selectedImageIDs.length === 0 || this.removingSelected) {
+                return;
+            }
+
+            this.removingSelected = true;
+            const imageIDs = [ ...this.selectedImageIDs ];
+            let removed = 0;
+            let failed = 0;
+
+            for (const imageID of imageIDs) {
+                const res = await new Promise((resolve) => {
+                    this.$root.emitAgent("", "removeDockerImage", imageID, (response) => {
+                        resolve(response);
+                    });
+                });
+
+                this.$root.toastRes(res);
+
+                if (res.ok) {
+                    removed += 1;
+                    this.selectedImageIDs = this.selectedImageIDs.filter((id) => id !== imageID);
+                } else {
+                    failed += 1;
+                }
+            }
+
+            this.removingSelected = false;
+            this.loadImages();
+
+            if (failed === 0) {
+                this.$root.toastRes({
+                    ok: true,
+                    msg: `Removed ${removed} image(s).`,
+                });
+            }
+        },
+        toggleVisibleImages(checked) {
+            const visibleIDs = this.pagedImages.map((image) => image.id);
+
+            if (checked) {
+                this.selectedImageIDs = Array.from(new Set([ ...this.selectedImageIDs, ...visibleIDs ]));
+                return;
+            }
+
+            this.selectedImageIDs = this.selectedImageIDs.filter((id) => !visibleIDs.includes(id));
         },
         loadContainers() {
             this.$root.emitAgent("", "dockerContainerList", (res) => {
@@ -469,6 +547,32 @@ export default {
     gap: 0.9rem;
 }
 
+.bulk-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-radius: 0.9rem;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.bulk-check,
+.card-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.bulk-check {
+    font-weight: 600;
+}
+
+.bulk-meta {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
 .section-count {
     font-size: 0.9rem;
     opacity: 0.7;
@@ -495,6 +599,10 @@ export default {
     justify-content: space-between;
     align-items: flex-start;
     gap: 1rem;
+}
+
+.card-check {
+    margin-top: 0.2rem;
 }
 
 .item-title-group {
