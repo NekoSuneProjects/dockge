@@ -37,6 +37,15 @@
   - Restreamer
   - Postgres
   - Redis Stack
+  - Matrix Server
+  - Neko MN Manager
+  - Metrics Server
+  - MediaMTX
+  - Pangolin
+  - Firefox
+  - n8n
+  - Pterodactyl Panel
+  - Pterodactyl Wings
 - Install target selection for local or remote agent nodes.
 - Cancel / kill support for stuck stack deploys, updates, and image pulls.
 - Node hardware detection in the web UI:
@@ -113,6 +122,7 @@
   - supports containerized detection better when `/dev/dri` and DRM paths are shared
 - Multi-GPU display improvements:
   - node hardware UI now lists each detected GPU separately as `GPU 1`, `GPU 2`, and so on
+- Speedtest Tracker app installs now auto-generate a random `APP_KEY` by default
 
 ### Changed
 
