@@ -48,6 +48,8 @@ export default defineComponent({
             agentList: {
 
             },
+
+            updateAllProgressMap: {} as Record<string, object>,
         };
     },
     computed: {
@@ -299,6 +301,13 @@ export default defineComponent({
                         }
                         this.allAgentStackList[res.endpoint].stackList = res.stackList;
                     }
+                }
+            });
+
+            agentSocket.on("updateAllStacksProgress", (res) => {
+                if (res && typeof res === "object") {
+                    const endpoint = typeof res.endpoint === "string" ? res.endpoint : "";
+                    this.updateAllProgressMap[endpoint] = res;
                 }
             });
 

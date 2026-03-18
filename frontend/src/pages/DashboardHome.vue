@@ -42,17 +42,45 @@
                                     <div class="text-muted small mb-2">
                                         Pull newer images and recreate all managed stacks on the selected node.
                                     </div>
-                                    <label class="form-label mb-1">Node</label>
-                                    <select v-model="updateAllEndpoint" class="form-select">
-                                        <option v-for="option in endpointOptions" :key="`update-${option.value}`" :value="option.value">
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
+                                    <div class="update-controls">
+                                        <div>
+                                            <label class="form-label mb-1">Node</label>
+                                            <select v-model="updateAllEndpoint" class="form-select">
+                                                <option v-for="option in endpointOptions" :key="`update-${option.value}`" :value="option.value">
+                                                    {{ option.label }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div class="form-check mt-4">
+                                            <input id="forceRestartAfterPull" v-model="updateAllForceRestart" class="form-check-input" type="checkbox">
+                                            <label class="form-check-label" for="forceRestartAfterPull">
+                                                Restart stacks after pull
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div>
                                     <button class="btn btn-warning" :disabled="updatingAllStacks" @click="updateAllStacks">
                                         {{ updatingAllStacks ? "Updating..." : "Update All" }}
                                     </button>
+                                </div>
+                            </div>
+
+                            <div v-if="updateAllProgress" class="mt-3">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <strong>{{ updateAllProgress.processed || 0 }} / {{ updateAllProgress.total || 0 }} stacks processed</strong>
+                                    <span>{{ updateAllProgressPercent }}%</span>
+                                </div>
+                                <div class="update-progress-track">
+                                    <div class="update-progress-fill" :style="{ width: `${updateAllProgressPercent}%` }"></div>
+                                </div>
+                                <div class="small text-muted mt-2">
+                                    <span v-if="updateAllProgress.currentStackName">Working on {{ updateAllProgress.currentStackName }}</span>
+                                    <span v-else-if="updatingAllStacks">Preparing stack update run...</span>
+                                    <span v-else>Last run finished.</span>
+                                </div>
+                                <div class="small text-muted mt-2">
+                                    {{ updateAllProgress.updatesFound || 0 }} with updates, {{ updateAllProgress.restarted || 0 }} restarted, {{ updateAllProgress.failed || 0 }} failed
                                 </div>
                             </div>
 
@@ -62,7 +90,7 @@
                                 </div>
                                 <div v-if="updateAllResult.results && updateAllResult.results.length > 0" class="small text-muted mt-2 update-results">
                                     <div v-for="result in updateAllResult.results" :key="result.stackName" :class="result.ok ? 'text-success' : 'text-danger'">
-                                        {{ result.stackName }}: {{ result.ok ? "updated" : result.error || "failed" }}
+                                        {{ formatUpdateAllResult(result) }}
                                     </div>
                                 </div>
                             </div>
@@ -221,6 +249,7 @@ export default {
             connectingAgent: false,
             systemSpecs: {},
             updateAllEndpoint: "",
+            updateAllForceRestart: false,
             updatingAllStacks: false,
             updateAllResult: null,
             showEditAgentDialog: false,
@@ -271,6 +300,17 @@ export default {
             }
 
             return options;
+        },
+        updateAllProgress() {
+            return this.$root.updateAllProgressMap[this.updateAllEndpoint] || null;
+        },
+        updateAllProgressPercent() {
+            const total = Number(this.updateAllProgress?.total || 0);
+            const processed = Number(this.updateAllProgress?.processed || 0);
+            if (total <= 0) {
+                return 0;
+            }
+            return Math.max(0, Math.min(100, Math.round((processed / total) * 100)));
         },
     },
 
@@ -418,12 +458,50 @@ export default {
 
             this.updatingAllStacks = true;
             this.updateAllResult = null;
+            this.$root.updateAllProgressMap[this.updateAllEndpoint] = {
+                running: true,
+                total: 0,
+                processed: 0,
+                updated: 0,
+                failed: 0,
+                updatesFound: 0,
+                restarted: 0,
+                currentStackName: "",
+                results: [],
+            };
 
-            this.$root.emitAgent(this.updateAllEndpoint, "updateAllStacks", (res) => {
+            this.$root.emitAgent(this.updateAllEndpoint, "updateAllStacks", {
+                forceRestart: this.updateAllForceRestart,
+            }, (res) => {
                 this.updatingAllStacks = false;
                 this.updateAllResult = res;
                 this.$root.toastRes(res);
             });
+        },
+
+        formatUpdateAllResult(result) {
+            if (!result.ok) {
+                return `${result.stackName}: ${result.error || "failed"}`;
+            }
+
+            const parts = [];
+            if (result.updatesFound) {
+                parts.push("updates found");
+            } else {
+                parts.push("no updates");
+            }
+
+            if (result.restarted) {
+                parts.push("restarted");
+            } else if (result.skippedRestart) {
+                parts.push("restart skipped");
+            }
+
+            if (result.pullSummary) {
+                parts.push(result.pullSummary);
+            }
+
+            return `${result.stackName}: ${parts.join(" | ")}`;
         },
 
         loadSystemSpecs() {
@@ -619,6 +697,27 @@ table {
 .update-results {
     max-height: 180px;
     overflow: auto;
+}
+
+.update-controls {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto;
+    gap: 1rem;
+    align-items: end;
+}
+
+.update-progress-track {
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.update-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #ffb020 0%, #ffd166 45%, #7bd88f 100%);
+    transition: width 0.25s ease;
 }
 
 </style>

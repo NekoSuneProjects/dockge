@@ -5,7 +5,7 @@
                 <div>
                     <h3 class="mb-1">Docker Overview</h3>
                     <div class="text-muted">
-                        Review images and containers with filters, cleaner spacing, and paged results.
+                        Review images and containers on the selected active node.
                     </div>
                 </div>
                 <div class="toolbar-actions">
@@ -15,6 +15,21 @@
                     </button>
                     <button class="btn btn-danger" @click="pruneImages">Prune Unused</button>
                     <button class="btn btn-normal" @click="loadContainers">Refresh Containers</button>
+                </div>
+            </div>
+
+            <div class="controls-grid docker-node-grid mt-3">
+                <div>
+                    <label class="form-label">Node</label>
+                    <select v-model="selectedEndpoint" class="form-select">
+                        <option v-for="option in endpointOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                </div>
+                <div class="summary-card node-card">
+                    <div class="summary-label">Selected Node</div>
+                    <div class="node-name">{{ selectedEndpointLabel }}</div>
                 </div>
             </div>
 
@@ -240,6 +255,7 @@ export default {
             containers: [],
             selectedImageIDs: [],
             removingSelected: false,
+            selectedEndpoint: "",
             imageSearch: "",
             imageUsageFilter: "all",
             imagePage: 1,
@@ -251,6 +267,19 @@ export default {
         };
     },
     computed: {
+        endpointOptions() {
+            return Object.keys(this.$root.agentList)
+                .filter((endpoint) => this.$root.agentStatusList[endpoint] === "online")
+                .map((endpoint) => ({
+                    value: endpoint,
+                    label: this.$root.endpointDisplayFunction(endpoint),
+                }));
+        },
+
+        selectedEndpointLabel() {
+            return this.$root.endpointDisplayFunction(this.selectedEndpoint);
+        },
+
         usedImageCount() {
             return this.images.filter((image) => image.used).length;
         },
@@ -344,6 +373,11 @@ export default {
         },
     },
     watch: {
+        selectedEndpoint() {
+            this.selectedImageIDs = [];
+            this.loadImages();
+            this.loadContainers();
+        },
         imageSearch() {
             this.imagePage = 1;
         },
@@ -372,14 +406,23 @@ export default {
                 this.containerPage = newValue;
             }
         },
+        "$root.agentStatusList": {
+            handler() {
+                if (!this.endpointOptions.some((option) => option.value === this.selectedEndpoint)) {
+                    this.selectedEndpoint = this.endpointOptions[0]?.value ?? "";
+                }
+            },
+            deep: true,
+        },
     },
     mounted() {
+        this.selectedEndpoint = this.endpointOptions[0]?.value ?? "";
         this.loadImages();
         this.loadContainers();
     },
     methods: {
         loadImages() {
-            this.$root.emitAgent("", "dockerImageList", (res) => {
+            this.$root.emitAgent(this.selectedEndpoint, "dockerImageList", (res) => {
                 if (res.ok) {
                     this.images = res.images;
                     this.selectedImageIDs = this.selectedImageIDs.filter((id) => this.images.some((image) => image.id === id));
@@ -389,7 +432,7 @@ export default {
             });
         },
         pruneImages() {
-            this.$root.emitAgent("", "pruneUnusedImages", (res) => {
+            this.$root.emitAgent(this.selectedEndpoint, "pruneUnusedImages", (res) => {
                 this.$root.toastRes(res);
                 if (res.ok) {
                     this.loadImages();
@@ -397,7 +440,7 @@ export default {
             });
         },
         removeImage(imageID) {
-            this.$root.emitAgent("", "removeDockerImage", imageID, (res) => {
+            this.$root.emitAgent(this.selectedEndpoint, "removeDockerImage", imageID, (res) => {
                 this.$root.toastRes(res);
                 if (res.ok) {
                     this.selectedImageIDs = this.selectedImageIDs.filter((id) => id !== imageID);
@@ -417,7 +460,7 @@ export default {
 
             for (const imageID of imageIDs) {
                 const res = await new Promise((resolve) => {
-                    this.$root.emitAgent("", "removeDockerImage", imageID, (response) => {
+                    this.$root.emitAgent(this.selectedEndpoint, "removeDockerImage", imageID, (response) => {
                         resolve(response);
                     });
                 });
@@ -453,7 +496,7 @@ export default {
             this.selectedImageIDs = this.selectedImageIDs.filter((id) => !visibleIDs.includes(id));
         },
         loadContainers() {
-            this.$root.emitAgent("", "dockerContainerList", (res) => {
+            this.$root.emitAgent(this.selectedEndpoint, "dockerContainerList", (res) => {
                 if (res.ok) {
                     this.containers = res.containers;
                 } else {
@@ -462,7 +505,7 @@ export default {
             });
         },
         containerAction(containerID, action) {
-            this.$root.emitAgent("", "dockerContainerAction", containerID, action, (res) => {
+            this.$root.emitAgent(this.selectedEndpoint, "dockerContainerAction", containerID, action, (res) => {
                 this.$root.toastRes(res);
                 if (res.ok) {
                     this.loadContainers();
@@ -539,6 +582,22 @@ export default {
     font-weight: 700;
     line-height: 1.1;
     margin-top: 0.35rem;
+}
+
+.node-card {
+    display: grid;
+    align-content: center;
+}
+
+.node-name {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-top: 0.35rem;
+    overflow-wrap: anywhere;
+}
+
+.docker-node-grid {
+    grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(140px, 0.8fr);
 }
 
 .controls-grid {

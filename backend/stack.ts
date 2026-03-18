@@ -19,6 +19,16 @@ import { InteractiveTerminal, Terminal } from "./terminal";
 import { Settings } from "./settings";
 import { buildDockerCommand, spawnDocker } from "./docker-cli";
 
+export interface BulkUpdateResult {
+    stackName: string;
+    ok: boolean;
+    updatesFound: boolean;
+    restarted: boolean;
+    skippedRestart?: boolean;
+    error?: string;
+    pullSummary?: string;
+}
+
 export class Stack {
 
     name: string;
@@ -103,6 +113,17 @@ export class Stack {
 
     get isManagedByDockge() : boolean {
         return fs.existsSync(this.path) && fs.statSync(this.path).isDirectory();
+    }
+
+    get isEligibleForBulkUpdate() : boolean {
+        const stackRoot = path.resolve(this.server.stackDirFullPath);
+        const currentStackPath = path.resolve(this.fullPath);
+
+        if (!this.isManagedByDockge) {
+            return false;
+        }
+
+        return currentStackPath === stackRoot || currentStackPath.startsWith(stackRoot + path.sep);
     }
 
     get status() : number {
@@ -493,6 +514,83 @@ export class Stack {
             throw new Error("Failed to restart, please check the terminal output for more information.");
         }
         return exitCode;
+    }
+
+    async updateForBulk(forceRestart = false): Promise<BulkUpdateResult> {
+        const pullRes = await spawnDocker(this.server, this.getComposeOptions("pull"), this.fullPath, {
+            encoding: "utf-8",
+        });
+
+        const pullOutput = `${pullRes.stdout?.toString() || ""}\n${pullRes.stderr?.toString() || ""}`.trim();
+        const updatesFound = Stack.detectPullUpdates(pullOutput);
+
+        await this.updateStatus();
+
+        const shouldRestart = forceRestart || updatesFound;
+        const canRestart = forceRestart || this.status === RUNNING;
+        let restarted = false;
+        let skippedRestart = false;
+
+        if (shouldRestart) {
+            if (canRestart) {
+                await spawnDocker(this.server, this.getComposeOptions("up", "-d", "--remove-orphans"), this.fullPath, {
+                    encoding: "utf-8",
+                });
+                restarted = true;
+            } else {
+                skippedRestart = true;
+            }
+        }
+
+        return {
+            stackName: this.name,
+            ok: true,
+            updatesFound,
+            restarted,
+            skippedRestart,
+            pullSummary: Stack.summarizePullOutput(pullOutput),
+        };
+    }
+
+    static detectPullUpdates(output: string) {
+        const normalized = output.toLowerCase();
+        if (!normalized.trim()) {
+            return false;
+        }
+
+        const updatedPatterns = [
+            "downloaded newer image",
+            "pull complete",
+            "extracting",
+            "downloading",
+            "pulling fs layer",
+            "status: pulled",
+        ];
+
+        return updatedPatterns.some((pattern) => normalized.includes(pattern));
+    }
+
+    static summarizePullOutput(output: string) {
+        const normalized = output.replace(/\r/g, "\n");
+        const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+
+        const priorityPatterns = [
+            /downloaded newer image/i,
+            /image is up to date/i,
+            /pull complete/i,
+            /error/i,
+            /denied/i,
+            /unauthorized/i,
+        ];
+
+        for (const pattern of priorityPatterns) {
+            const match = lines.find((line) => pattern.test(line));
+            if (match) {
+                return match;
+            }
+        }
+
+        return lines[lines.length - 1] || "";
     }
 
     async joinCombinedTerminal(socket: DockgeSocket) {

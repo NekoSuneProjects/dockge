@@ -5,6 +5,7 @@ export default defineComponent({
         return {
             system: (window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light",
             userTheme: localStorage.theme,
+            customCSS: localStorage.customCSS || "",
             statusPageTheme: "light",
             forceStatusPageTheme: false,
             path: "",
@@ -31,6 +32,11 @@ export default defineComponent({
 
         userTheme(to, from) {
             localStorage.theme = to;
+        },
+
+        customCSS(to) {
+            localStorage.customCSS = to || "";
+            this.applyCustomCSS();
         },
 
         styleElapsedTime(to, from) {
@@ -61,6 +67,7 @@ export default defineComponent({
 
         document.body.classList.add(this.theme);
         this.updateThemeColorMeta();
+        this.applyCustomCSS();
     },
 
     methods: {
@@ -74,6 +81,17 @@ export default defineComponent({
             } else {
                 document.querySelector("#theme-color").setAttribute("content", "#5cdd8b");
             }
+        },
+
+        applyCustomCSS() {
+            let styleTag = document.querySelector("#dockge-custom-css");
+            if (!styleTag) {
+                styleTag = document.createElement("style");
+                styleTag.id = "dockge-custom-css";
+                document.head.appendChild(styleTag);
+            }
+
+            styleTag.textContent = this.customCSS || "";
         }
     }
 });

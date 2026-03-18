@@ -301,47 +301,135 @@ export class DockerSocketHandler extends AgentSocketHandler {
             }
         });
 
-        agentSocket.on("updateAllStacks", async (callback) => {
+        agentSocket.on("updateAllStacks", async (requestData : unknown, callback) => {
             try {
                 checkLogin(socket);
                 await requireAdmin(socket);
 
+                let forceRestart = false;
+                if (typeof requestData === "function") {
+                    callback = requestData;
+                } else if (typeof requestData === "object" && requestData !== null) {
+                    forceRestart = Boolean((requestData as Record<string, unknown>).forceRestart);
+                }
+
                 const stackList = await Stack.getStackList(server, true);
-                const results: Array<{ stackName: string, ok: boolean, error?: string }> = [];
+                const managedStacks = Array.from(stackList.values()).filter((stack) => stack.isEligibleForBulkUpdate);
+                const results: Array<{
+                    stackName: string,
+                    ok: boolean,
+                    updatesFound: boolean,
+                    restarted: boolean,
+                    skippedRestart?: boolean,
+                    error?: string,
+                    pullSummary?: string,
+                    state?: string,
+                }> = [];
                 let updated = 0;
                 let failed = 0;
+                let updatesFoundCount = 0;
+                let restartedCount = 0;
+                let processed = 0;
 
-                for (const [ stackName, stack ] of stackList) {
-                    if (!stack.isManagedByDockge) {
-                        continue;
-                    }
+                socket.emitAgent("updateAllStacksProgress", {
+                    running: true,
+                    total: managedStacks.length,
+                    processed,
+                    updated,
+                    failed,
+                    updatesFound: updatesFoundCount,
+                    restarted: restartedCount,
+                    currentStackName: "",
+                    results,
+                });
+
+                for (const stack of managedStacks) {
+                    socket.emitAgent("updateAllStacksProgress", {
+                        running: true,
+                        total: managedStacks.length,
+                        processed,
+                        updated,
+                        failed,
+                        updatesFound: updatesFoundCount,
+                        restarted: restartedCount,
+                        currentStackName: stack.name,
+                        results,
+                    });
 
                     try {
-                        await stack.update(socket);
+                        const result = await stack.updateForBulk(forceRestart);
                         updated += 1;
+                        if (result.updatesFound) {
+                            updatesFoundCount += 1;
+                        }
+                        if (result.restarted) {
+                            restartedCount += 1;
+                        }
                         results.push({
-                            stackName,
-                            ok: true,
+                            ...result,
+                            state: result.updatesFound ? (result.restarted ? "updated_and_restarted" : "updated") : (result.restarted ? "restarted" : "no_updates"),
                         });
                     } catch (e) {
                         failed += 1;
                         results.push({
-                            stackName,
+                            stackName: stack.name,
                             ok: false,
+                            updatesFound: false,
+                            restarted: false,
+                            state: "failed",
                             error: e instanceof Error ? e.message : "Unknown error",
                         });
                     }
+
+                    processed += 1;
+                    socket.emitAgent("updateAllStacksProgress", {
+                        running: true,
+                        total: managedStacks.length,
+                        processed,
+                        updated,
+                        failed,
+                        updatesFound: updatesFoundCount,
+                        restarted: restartedCount,
+                        currentStackName: processed < managedStacks.length ? managedStacks[processed].name : "",
+                        results,
+                    });
                 }
 
                 server.sendStackList();
-                callbackResult({
-                    ok: failed === 0,
-                    msg: failed === 0 ? `Updated ${updated} stack(s).` : `Updated ${updated} stack(s), ${failed} failed.`,
+                socket.emitAgent("updateAllStacksProgress", {
+                    running: false,
+                    total: managedStacks.length,
+                    processed,
                     updated,
                     failed,
+                    updatesFound: updatesFoundCount,
+                    restarted: restartedCount,
+                    currentStackName: "",
+                    results,
+                });
+                callbackResult({
+                    ok: failed === 0,
+                    msg: failed === 0
+                        ? `Processed ${updated} stack(s). ${updatesFoundCount} had updates, ${restartedCount} restarted.`
+                        : `Processed ${updated} stack(s). ${updatesFoundCount} had updates, ${restartedCount} restarted, ${failed} failed.`,
+                    updated,
+                    failed,
+                    updatesFound: updatesFoundCount,
+                    restarted: restartedCount,
                     results,
                 }, callback);
             } catch (e) {
+                socket.emitAgent("updateAllStacksProgress", {
+                    running: false,
+                    total: 0,
+                    processed: 0,
+                    updated: 0,
+                    failed: 0,
+                    updatesFound: 0,
+                    restarted: 0,
+                    currentStackName: "",
+                    results: [],
+                });
                 callbackError(e, callback);
             }
         });
