@@ -285,13 +285,13 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 }
                 await requireStackAccess(socket, stackName, socket.endpoint);
 
-                const allowedActions = new Set([ "start", "stop", "restart" ]);
+                const allowedActions = new Set([ "start", "stop", "restart", "kill" ]);
                 if (!allowedActions.has(action)) {
                     throw new ValidationError("Unsupported service action");
                 }
 
                 const stack = await Stack.getStack(server, stackName);
-                await stack.serviceAction(socket, serviceName, action as "start" | "stop" | "restart");
+                await stack.serviceAction(socket, serviceName, action as "start" | "stop" | "restart" | "kill");
                 server.sendStackList();
 
                 callbackResult({

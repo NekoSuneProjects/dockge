@@ -42,6 +42,15 @@
                             <font-awesome-icon icon="stop" />
                         </button>
                         <button
+                            v-if="isRunning"
+                            class="btn btn-danger btn-sm"
+                            :disabled="actionProcessing"
+                            title="Force kill container"
+                            @click="runAction('kill')"
+                        >
+                            Kill
+                        </button>
+                        <button
                             class="btn btn-normal btn-sm"
                             :disabled="actionProcessing"
                             @click="runAction('restart')"

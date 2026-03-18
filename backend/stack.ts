@@ -471,7 +471,7 @@ export class Stack {
         return exitCode;
     }
 
-    async serviceAction(socket: DockgeSocket, serviceName: string, action: "start" | "stop" | "restart") : Promise<number> {
+    async serviceAction(socket: DockgeSocket, serviceName: string, action: "start" | "stop" | "restart" | "kill") : Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
         const command = await buildDockerCommand(this.server, this.getComposeOptions(action, serviceName), this.fullPath);
         const exitCode = await Terminal.exec(this.server, socket, terminalName, command.file, command.args, command.cwd || this.fullPath);
