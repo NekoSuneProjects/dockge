@@ -137,6 +137,8 @@ export class TerminalSocketHandler extends AgentSocketHandler {
 
                 if (terminal) {
                     terminal.join(socket);
+                } else {
+                    Terminal.registerPendingJoin(terminalName, socket);
                 }
 
                 if (!buffer) {

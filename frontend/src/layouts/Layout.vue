@@ -314,6 +314,8 @@ main {
         background-color: $dark-header-bg;
         border-bottom-color: $dark-header-bg !important;
 
+        a,
+        .text-dark,
         span {
             color: #f0f6fc;
         }

@@ -69,6 +69,7 @@ export default {
             first: true,
             terminalInputBuffer: "",
             cursorPosition: 0,
+            lastSelection: "",
         };
     },
     created() {
@@ -339,10 +340,17 @@ export default {
          * Handle right-click context menu for paste operation
          */
         handleContextMenu(event) {
-            // Prevent default context menu
+            if (this.mode === "displayOnly") {
+                event.preventDefault();
+                const selectedText = this.terminal.getSelection() || this.lastSelection;
+                if (selectedText) {
+                    this.copyToClipboard(selectedText);
+                }
+                return;
+            }
+
             event.preventDefault();
-            
-            // Only handle paste for modes that support input
+
             if (this.mode === "mainTerminal" || this.mode === "interactive") {
                 this.handlePaste();
             }
@@ -354,6 +362,7 @@ export default {
         handleSelection() {
             const selectedText = this.terminal.getSelection();
             if (selectedText && selectedText.length > 0) {
+                this.lastSelection = selectedText;
                 this.copyToClipboard(selectedText);
             }
         },

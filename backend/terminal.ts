@@ -15,6 +15,7 @@ import { buildDockerConsoleCommand } from "./docker-cli";
  */
 export class Terminal {
     protected static terminalMap : Map<string, Terminal> = new Map();
+    protected static pendingSocketJoinMap : Map<string, Record<string, DockgeSocket>> = new Map();
 
     protected _ptyProcess? : pty.IPty;
     protected server : DockgeServer;
@@ -44,6 +45,7 @@ export class Terminal {
         this.cwd = cwd;
 
         Terminal.terminalMap.set(this.name, this);
+        Terminal.attachPendingSockets(this);
     }
 
     get rows() {
@@ -173,10 +175,12 @@ export class Terminal {
 
     public join(socket : DockgeSocket) {
         this.socketList[socket.id] = socket;
+        Terminal.unregisterPendingJoin(this.name, socket);
     }
 
     public leave(socket : DockgeSocket) {
         delete this.socketList[socket.id];
+        Terminal.unregisterPendingJoin(this.name, socket);
     }
 
     public get ptyProcess() {
@@ -268,6 +272,48 @@ export class Terminal {
         }
         terminal.cancel();
         return true;
+    }
+
+    public static registerPendingJoin(name: string, socket: DockgeSocket) {
+        if (Terminal.terminalMap.has(name)) {
+            Terminal.terminalMap.get(name)?.join(socket);
+            return;
+        }
+
+        if (!Terminal.pendingSocketJoinMap.has(name)) {
+            Terminal.pendingSocketJoinMap.set(name, {});
+        }
+
+        Terminal.pendingSocketJoinMap.get(name)![socket.id] = socket;
+    }
+
+    public static unregisterPendingJoin(name: string, socket: DockgeSocket) {
+        const waitingSockets = Terminal.pendingSocketJoinMap.get(name);
+        if (!waitingSockets) {
+            return;
+        }
+
+        delete waitingSockets[socket.id];
+
+        if (Object.keys(waitingSockets).length === 0) {
+            Terminal.pendingSocketJoinMap.delete(name);
+        }
+    }
+
+    protected static attachPendingSockets(terminal: Terminal) {
+        const waitingSockets = Terminal.pendingSocketJoinMap.get(terminal.name);
+        if (!waitingSockets) {
+            return;
+        }
+
+        for (const socketID in waitingSockets) {
+            const socket = waitingSockets[socketID];
+            if (socket.connected) {
+                terminal.join(socket);
+            }
+        }
+
+        Terminal.pendingSocketJoinMap.delete(terminal.name);
     }
 }
 

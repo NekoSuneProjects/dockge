@@ -238,6 +238,18 @@ optgroup {
     background-color: #090c10;
     color: $dark-font-color;
 
+    .text-muted,
+    .form-text,
+    .form-label,
+    .form-check-label,
+    .col-form-label,
+    label,
+    legend,
+    small,
+    .small {
+        color: rgba($dark-font-color, 0.86) !important;
+    }
+
     mark, .mark {
         background-color: #b6ad86;
     }
@@ -290,6 +302,12 @@ optgroup {
     .form-control:focus,
     .form-select,
     .form-select:focus {
+        color: $dark-font-color;
+        background-color: $dark-bg2;
+    }
+
+    .form-select option,
+    .form-select optgroup {
         color: $dark-font-color;
         background-color: $dark-bg2;
     }
@@ -350,6 +368,12 @@ optgroup {
 
         &:hover, &:active, &:focus, &.active {
             color: $dark-font-color2;
+        }
+
+        &:disabled,
+        &.disabled {
+            color: $dark-font-color2;
+            opacity: 0.9;
         }
     }
 
@@ -671,6 +695,14 @@ code {
 
 .form-text {
     color: $dark-font-color3;
+}
+
+.form-label,
+.form-check-label,
+.col-form-label,
+label,
+legend {
+    color: inherit;
 }
 
 
