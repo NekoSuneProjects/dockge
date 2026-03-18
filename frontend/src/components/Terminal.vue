@@ -302,7 +302,7 @@ export default {
          */
         async handlePaste() {
             try {
-                const text = await navigator.clipboard.readText();
+                const text = await this.readClipboardText();
                 if (text) {
                     this.pasteText(text);
                 }
@@ -369,12 +369,35 @@ export default {
             this.lastSelection = this.terminal?.getSelection?.() || "";
         },
 
+        async readClipboardText() {
+            if (navigator?.clipboard?.readText) {
+                return navigator.clipboard.readText();
+            }
+
+            throw new Error("Clipboard read is not available in this browser context.");
+        },
+
         /**
          * Copy text to clipboard
          */
         async copyToClipboard(text) {
             try {
-                await navigator.clipboard.writeText(text);
+                if (navigator?.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return;
+                }
+
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.setAttribute("readonly", "");
+                textArea.style.position = "fixed";
+                textArea.style.opacity = "0";
+                textArea.style.pointerEvents = "none";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
                 console.debug("Text copied to clipboard:", text);
             } catch (error) {
                 console.error("Failed to copy to clipboard:", error);
