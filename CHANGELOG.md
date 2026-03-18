@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-03-18
+
+### Added
+
+- Agent node nicknames with persisted backend storage.
+- Admin edit flow for existing Dockge Agents:
+  - nickname
+  - username
+  - optional password update
+
+### Fixed
+
+- One-click app installs now respect the selected local or remote node more reliably.
+- One-click install progress console now subscribes to live terminal output correctly instead of showing blank output.
+- One-click install progress now shows clearer waiting and error states when Docker output is delayed or fails early.
+- `Update All Stacks` node selection now shows the available online nodes in the dropdown and targets the selected node.
+- Node selectors across the app now display nickname-aware labels instead of only raw endpoints.
+
 ## 2026-03-14
 
 ### Added
