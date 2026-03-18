@@ -42,6 +42,9 @@
                         <h4 class="mb-0">Install Console</h4>
                     </div>
                     <Terminal
+                        ref="installTerminal"
+                        v-if="installRequest && terminalName"
+                        :key="terminalName"
                         :name="terminalName"
                         :endpoint="endpoint"
                         :rows="18"
@@ -83,6 +86,7 @@ export default {
             hasTerminalOutput: false,
             terminalListener: null,
             redirectTimeout: null,
+            boundTerminalName: "",
         };
     },
 
@@ -158,6 +162,12 @@ export default {
         },
     },
 
+    watch: {
+        terminalName() {
+            this.syncInstallTerminal();
+        },
+    },
+
     mounted() {
         this.installRequest = this.$root.pendingAppInstall;
         if (!this.installRequest || this.installRequest.appID !== this.$route.params.appID) {
@@ -165,13 +175,13 @@ export default {
             return;
         }
 
-        this.attachTerminalListener();
+        this.syncInstallTerminal();
         this.startInstall();
     },
 
     beforeUnmount() {
-        if (this.terminalListener) {
-            this.$root.removeTerminalListener(this.terminalName, this.terminalListener);
+        if (this.terminalListener && this.boundTerminalName) {
+            this.$root.removeTerminalListener(this.boundTerminalName, this.terminalListener);
         }
         if (this.redirectTimeout) {
             clearTimeout(this.redirectTimeout);
@@ -180,6 +190,20 @@ export default {
 
     methods: {
         attachTerminalListener() {
+            if (!this.terminalName) {
+                return;
+            }
+
+            if (this.terminalListener && this.boundTerminalName && this.boundTerminalName !== this.terminalName) {
+                this.$root.removeTerminalListener(this.boundTerminalName, this.terminalListener);
+                this.terminalListener = null;
+                this.boundTerminalName = "";
+            }
+
+            if (this.terminalListener && this.boundTerminalName === this.terminalName) {
+                return;
+            }
+
             this.terminalListener = {
                 onWrite: (data) => {
                     this.hasTerminalOutput = true;
@@ -190,6 +214,22 @@ export default {
                 },
             };
             this.$root.addTerminalListener(this.terminalName, this.terminalListener);
+            this.boundTerminalName = this.terminalName;
+        },
+
+        bindInstallTerminal() {
+            if (!this.terminalName) {
+                return;
+            }
+
+            this.$nextTick(() => {
+                this.$refs.installTerminal?.bind(this.endpoint, this.terminalName);
+            });
+        },
+
+        syncInstallTerminal() {
+            this.attachTerminalListener();
+            this.bindInstallTerminal();
         },
 
         startInstall() {

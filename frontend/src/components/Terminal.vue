@@ -70,6 +70,8 @@ export default {
             terminalInputBuffer: "",
             cursorPosition: 0,
             lastSelection: "",
+            selectionChangeDisposable: null,
+            boundContextMenuHandler: null,
         };
     },
     created() {
@@ -103,10 +105,11 @@ export default {
         this.terminal.focus();
 
         // Add right-click context menu handler for paste
-        this.$refs.terminal.addEventListener('contextmenu', this.handleContextMenu);
+        this.boundContextMenuHandler = (event) => this.handleContextMenu(event);
+        this.$refs.terminal.addEventListener("contextmenu", this.boundContextMenuHandler);
 
-        // Add selection handler for copy to clipboard
-        this.terminal.onSelectionChange(() => {
+        // Track the current selection so right-click copy can use it.
+        this.selectionChangeDisposable = this.terminal.onSelectionChange(() => {
             this.handleSelection();
         });
 
@@ -143,8 +146,11 @@ export default {
     unmounted() {
         window.removeEventListener("resize", this.onResizeEvent); // Remove the resize event listener from the window object.
         this.$root.unbindTerminal(this.name);
+        this.selectionChangeDisposable?.dispose?.();
         this.terminal.dispose();
-        this.$refs.terminal?.removeEventListener('contextmenu', this.handleContextMenu);
+        if (this.boundContextMenuHandler) {
+            this.$refs.terminal?.removeEventListener("contextmenu", this.boundContextMenuHandler);
+        }
     },
 
     methods: {
@@ -360,11 +366,7 @@ export default {
          * Handle text selection in terminal - copy to clipboard
          */
         handleSelection() {
-            const selectedText = this.terminal.getSelection();
-            if (selectedText && selectedText.length > 0) {
-                this.lastSelection = selectedText;
-                this.copyToClipboard(selectedText);
-            }
+            this.lastSelection = this.terminal?.getSelection?.() || "";
         },
 
         /**

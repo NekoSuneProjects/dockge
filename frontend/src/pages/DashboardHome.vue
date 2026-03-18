@@ -60,8 +60,8 @@
                                     </div>
                                 </div>
                                 <div>
-                                    <button class="btn btn-warning" :disabled="updatingAllStacks" @click="updateAllStacks">
-                                        {{ updatingAllStacks ? "Updating..." : "Update All" }}
+                                    <button class="btn btn-warning" :disabled="disableUpdateAllButton" @click="updateAllStacks">
+                                        {{ isUpdateAllRunning ? "Updating..." : "Update All" }}
                                     </button>
                                 </div>
                             </div>
@@ -76,8 +76,8 @@
                                 </div>
                                 <div class="small text-muted mt-2">
                                     <span v-if="updateAllProgress.currentStackName">Working on {{ updateAllProgress.currentStackName }}</span>
-                                    <span v-else-if="updatingAllStacks">Preparing stack update run...</span>
-                                    <span v-else>Last run finished.</span>
+                                    <span v-else-if="isUpdateAllRunning">Preparing stack update run...</span>
+                                    <span v-else>{{ updateAllProgress.msg || "Last run finished." }}</span>
                                 </div>
                                 <div class="small text-muted mt-2">
                                     {{ updateAllProgress.updatesFound || 0 }} with updates, {{ updateAllProgress.restarted || 0 }} restarted, {{ updateAllProgress.failed || 0 }} failed
@@ -250,8 +250,6 @@ export default {
             systemSpecs: {},
             updateAllEndpoint: "",
             updateAllForceRestart: false,
-            updatingAllStacks: false,
-            updateAllResult: null,
             showEditAgentDialog: false,
             editingAgent: {
                 url: "",
@@ -304,6 +302,12 @@ export default {
         updateAllProgress() {
             return this.$root.updateAllProgressMap[this.updateAllEndpoint] || null;
         },
+        updateAllResult() {
+            if (!this.updateAllProgress || this.updateAllProgress.running) {
+                return null;
+            }
+            return this.updateAllProgress;
+        },
         updateAllProgressPercent() {
             const total = Number(this.updateAllProgress?.total || 0);
             const processed = Number(this.updateAllProgress?.processed || 0);
@@ -311,6 +315,15 @@ export default {
                 return 0;
             }
             return Math.max(0, Math.min(100, Math.round((processed / total) * 100)));
+        },
+        isUpdateAllRunning() {
+            return Boolean(this.updateAllProgress?.running);
+        },
+        isAnyUpdateAllRunning() {
+            return Object.values(this.$root.updateAllProgressMap || {}).some((progress) => Boolean(progress?.running));
+        },
+        disableUpdateAllButton() {
+            return this.isAnyUpdateAllRunning;
         },
     },
 
@@ -456,8 +469,11 @@ export default {
                 return;
             }
 
-            this.updatingAllStacks = true;
-            this.updateAllResult = null;
+            if (this.isAnyUpdateAllRunning) {
+                this.$root.toastError("Update All is already running. Wait for it to finish before starting another run.");
+                return;
+            }
+
             this.$root.updateAllProgressMap[this.updateAllEndpoint] = {
                 running: true,
                 total: 0,
@@ -473,8 +489,6 @@ export default {
             this.$root.emitAgent(this.updateAllEndpoint, "updateAllStacks", {
                 forceRestart: this.updateAllForceRestart,
             }, (res) => {
-                this.updatingAllStacks = false;
-                this.updateAllResult = res;
                 this.$root.toastRes(res);
             });
         },

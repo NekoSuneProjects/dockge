@@ -13,6 +13,8 @@ import { getSystemSpecs } from "../system-specs";
 import { spawnDocker } from "../docker-cli";
 
 export class DockerSocketHandler extends AgentSocketHandler {
+    private static runningBulkUpdateEndpoints = new Set<string>();
+
     create(socket : DockgeSocket, server : DockgeServer, agentSocket : AgentSocket) {
         // Do not call super.create()
 
@@ -302,6 +304,7 @@ export class DockerSocketHandler extends AgentSocketHandler {
         });
 
         agentSocket.on("updateAllStacks", async (requestData : unknown, callback) => {
+            const endpointKey = socket.endpoint || "";
             try {
                 checkLogin(socket);
                 await requireAdmin(socket);
@@ -312,6 +315,12 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 } else if (typeof requestData === "object" && requestData !== null) {
                     forceRestart = Boolean((requestData as Record<string, unknown>).forceRestart);
                 }
+
+                if (DockerSocketHandler.runningBulkUpdateEndpoints.has(endpointKey)) {
+                    throw new ValidationError("Update All is already running on this node.");
+                }
+
+                DockerSocketHandler.runningBulkUpdateEndpoints.add(endpointKey);
 
                 const stackList = await Stack.getStackList(server, true);
                 const managedStacks = Array.from(stackList.values()).filter((stack) => stack.isEligibleForBulkUpdate);
@@ -330,6 +339,26 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 let updatesFoundCount = 0;
                 let restartedCount = 0;
                 let processed = 0;
+
+                if (managedStacks.length === 0) {
+                    const emptyResult = {
+                        ok: true,
+                        running: false,
+                        total: 0,
+                        processed: 0,
+                        updated: 0,
+                        failed: 0,
+                        updatesFound: 0,
+                        restarted: 0,
+                        currentStackName: "",
+                        results,
+                        msg: "No Dockge-managed stacks found on this node.",
+                        finishedAt: Date.now(),
+                    };
+                    socket.emitAgent("updateAllStacksProgress", emptyResult);
+                    callbackResult(emptyResult, callback);
+                    return;
+                }
 
                 socket.emitAgent("updateAllStacksProgress", {
                     running: true,
@@ -396,7 +425,14 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 }
 
                 server.sendStackList();
-                socket.emitAgent("updateAllStacksProgress", {
+                const finalMsg = failed > 0
+                    ? `Processed ${updated} stack(s). ${updatesFoundCount} had updates, ${restartedCount} restarted, ${failed} failed.`
+                    : updatesFoundCount === 0
+                        ? `No more updates found. Checked ${processed} Dockge-managed stack(s).`
+                        : `Processed ${updated} stack(s). ${updatesFoundCount} had updates, ${restartedCount} restarted.`;
+
+                const finalResult = {
+                    ok: failed === 0,
                     running: false,
                     total: managedStacks.length,
                     processed,
@@ -406,20 +442,14 @@ export class DockerSocketHandler extends AgentSocketHandler {
                     restarted: restartedCount,
                     currentStackName: "",
                     results,
-                });
-                callbackResult({
-                    ok: failed === 0,
-                    msg: failed === 0
-                        ? `Processed ${updated} stack(s). ${updatesFoundCount} had updates, ${restartedCount} restarted.`
-                        : `Processed ${updated} stack(s). ${updatesFoundCount} had updates, ${restartedCount} restarted, ${failed} failed.`,
-                    updated,
-                    failed,
-                    updatesFound: updatesFoundCount,
-                    restarted: restartedCount,
-                    results,
-                }, callback);
+                    msg: finalMsg,
+                    finishedAt: Date.now(),
+                };
+                socket.emitAgent("updateAllStacksProgress", finalResult);
+                callbackResult(finalResult, callback);
             } catch (e) {
                 socket.emitAgent("updateAllStacksProgress", {
+                    ok: false,
                     running: false,
                     total: 0,
                     processed: 0,
@@ -429,8 +459,12 @@ export class DockerSocketHandler extends AgentSocketHandler {
                     restarted: 0,
                     currentStackName: "",
                     results: [],
+                    msg: e instanceof Error ? e.message : "Update All failed.",
+                    finishedAt: Date.now(),
                 });
                 callbackError(e, callback);
+            } finally {
+                DockerSocketHandler.runningBulkUpdateEndpoints.delete(endpointKey);
             }
         });
 
