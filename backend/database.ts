@@ -272,6 +272,18 @@ export class Database {
             }
         }
 
+        if (await knex.schema.hasTable("agent")) {
+            const missingColumns = {
+                nickname: !(await knex.schema.hasColumn("agent", "nickname")),
+            };
+
+            if (missingColumns.nickname) {
+                await knex.schema.alterTable("agent", (table: Knex.AlterTableBuilder) => {
+                    table.string("nickname", 255).nullable();
+                });
+            }
+        }
+
         if (!await knex.schema.hasTable("stack_access")) {
             await knex.schema.createTable("stack_access", (table: Knex.CreateTableBuilder) => {
                 table.increments("id");

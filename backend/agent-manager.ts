@@ -77,12 +77,47 @@ export class AgentManager {
      * @param username
      * @param password
      */
-    async add(url : string, username : string, password : string) : Promise<Agent> {
+    async add(url : string, username : string, password : string, nickname = "") : Promise<Agent> {
         let bean = R.dispense("agent") as Agent;
         bean.url = url;
         bean.username = username;
         bean.password = password;
+        bean.nickname = nickname;
         await R.store(bean);
+        return bean;
+    }
+
+    async update(url : string, data : { username?: string, password?: string, nickname?: string }) : Promise<Agent> {
+        const bean = await R.findOne("agent", " url = ? ", [
+            url,
+        ]) as Agent | null;
+
+        if (!bean) {
+            throw new Error("Agent not found");
+        }
+
+        if (typeof data.username === "string") {
+            bean.username = data.username;
+        }
+
+        if (typeof data.password === "string" && data.password !== "") {
+            bean.password = data.password;
+        }
+
+        if (typeof data.nickname === "string") {
+            bean.nickname = data.nickname.trim();
+        }
+
+        await R.store(bean);
+
+        const endpoint = bean.endpoint;
+        if (this.agentSocketList[endpoint]) {
+            this.disconnect(endpoint);
+            delete this.agentSocketList[endpoint];
+            delete this.agentLoggedInList[endpoint];
+            this.connect(bean.url, bean.username, bean.password);
+        }
+
         return bean;
     }
 

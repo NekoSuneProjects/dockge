@@ -147,11 +147,17 @@ export default defineComponent({
     methods: {
 
         endpointDisplayFunction(endpoint : string) {
-            if (endpoint) {
-                return endpoint;
-            } else {
+            if (!endpoint) {
                 return this.$t("currentEndpoint");
             }
+
+            const agent = this.agentList[endpoint];
+            const nickname = agent?.nickname?.trim?.();
+            if (nickname) {
+                return `${nickname} (${endpoint})`;
+            }
+
+            return endpoint;
         },
 
         /**

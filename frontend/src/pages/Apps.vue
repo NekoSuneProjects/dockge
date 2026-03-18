@@ -188,18 +188,18 @@ export default {
             const options = [
                 {
                     value: "",
-                    label: this.$t("currentEndpoint"),
+                    label: this.buildEndpointLabel(""),
                 }
             ];
 
             for (const endpoint of Object.keys(this.$root.agentList)) {
-                if (!endpoint) {
+                if (!endpoint || this.$root.agentStatusList[endpoint] !== "online") {
                     continue;
                 }
 
                 options.push({
                     value: endpoint,
-                    label: endpoint,
+                    label: this.buildEndpointLabel(endpoint),
                 });
             }
 
@@ -265,6 +265,12 @@ export default {
     },
 
     methods: {
+        buildEndpointLabel(endpoint) {
+            const label = this.$root.endpointDisplayFunction(endpoint);
+            const status = this.$root.agentStatusList[endpoint];
+            return status ? `(${status}) ${label}` : label;
+        },
+
         loadAppCatalog() {
             if (!this.$root.isAdmin) {
                 return;
@@ -288,7 +294,7 @@ export default {
 
             this.installForm = {
                 stackName: app.defaultStackName,
-                endpoint: "",
+                endpoint: this.endpointOptions[0]?.value ?? "",
                 values,
             };
             this.showInstallDialog = true;

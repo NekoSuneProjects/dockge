@@ -80,6 +80,7 @@ export default {
             progressDetail: "Preparing install",
             lastEventLabel: "Waiting",
             installStarted: false,
+            hasTerminalOutput: false,
             terminalListener: null,
             redirectTimeout: null,
         };
@@ -181,6 +182,7 @@ export default {
         attachTerminalListener() {
             this.terminalListener = {
                 onWrite: (data) => {
+                    this.hasTerminalOutput = true;
                     this.updateProgressFromOutput(data);
                 },
                 onExit: (exitCode) => {
@@ -199,6 +201,7 @@ export default {
             this.installState = "Installing";
             this.progressPercent = 8;
             this.progressDetail = "Starting container install";
+            this.lastEventLabel = "Install requested";
 
             this.$root.emitAgent(this.endpoint, "installAppTemplate", this.installRequest.appID, {
                 stackName: this.installRequest.stackName,
@@ -209,13 +212,19 @@ export default {
                     this.installState = "Failed";
                     this.progressPercent = Math.max(this.progressPercent, 100);
                     this.progressDetail = "Install exited with errors";
+                    this.lastEventLabel = "Install failed";
+                } else if (!this.hasTerminalOutput) {
+                    this.progressPercent = Math.max(this.progressPercent, 28);
+                    this.progressDetail = "Waiting for docker output";
+                    this.lastEventLabel = "Install accepted";
                 }
             });
         },
 
         updateProgressFromOutput(data) {
             const text = String(data || "");
-            this.lastEventLabel = "Live output";
+            const condensed = text.replace(/\s+/g, " ").trim();
+            this.lastEventLabel = condensed ? condensed.slice(0, 80) : "Live output";
 
             const runningMatch = text.match(/Running\s+(\d+)\/(\d+)/i);
             if (runningMatch) {
@@ -244,6 +253,12 @@ export default {
             if (/network|volume/i.test(text)) {
                 this.progressPercent = Math.min(70, Math.max(this.progressPercent, 36));
                 this.progressDetail = "Preparing docker resources";
+                return;
+            }
+
+            if (/error|failed|denied|unauthorized|no such/i.test(text)) {
+                this.progressPercent = Math.min(99, Math.max(this.progressPercent, 24));
+                this.progressDetail = "Docker reported an error";
             }
         },
 
@@ -292,6 +307,8 @@ export default {
             this.installState = "Starting";
             this.progressPercent = 4;
             this.progressDetail = "Preparing install";
+            this.lastEventLabel = "Waiting";
+            this.hasTerminalOutput = false;
             this.startInstall();
         },
 

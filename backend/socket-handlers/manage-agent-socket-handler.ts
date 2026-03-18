@@ -22,7 +22,7 @@ export class ManageAgentSocketHandler extends SocketHandler {
                 let data = requestData as LooseObject;
                 let manager = socket.instanceManager;
                 await manager.test(data.url, data.username, data.password);
-                await manager.add(data.url, data.username, data.password);
+                await manager.add(data.url, data.username, data.password, typeof data.nickname === "string" ? data.nickname.trim() : "");
 
                 // connect to the agent
                 manager.connect(data.url, data.username, data.password);
@@ -38,6 +38,40 @@ export class ManageAgentSocketHandler extends SocketHandler {
                     msgi18n: true,
                 }, callback);
 
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
+        socket.on("updateAgent", async (requestData : unknown, callback : unknown) => {
+            try {
+                log.debug("manage-agent-socket-handler", "updateAgent");
+                checkLogin(socket);
+                await requireAdmin(socket);
+
+                if (typeof requestData !== "object" || requestData === null) {
+                    throw new Error("Data must be an object");
+                }
+
+                const data = requestData as LooseObject;
+                if (typeof data.url !== "string" || !data.url) {
+                    throw new Error("URL is required");
+                }
+
+                const manager = socket.instanceManager;
+                await manager.update(data.url, {
+                    username: typeof data.username === "string" ? data.username : undefined,
+                    password: typeof data.password === "string" ? data.password : undefined,
+                    nickname: typeof data.nickname === "string" ? data.nickname : undefined,
+                });
+
+                server.disconnectAllSocketClients(undefined, socket.id);
+                manager.sendAgentList();
+
+                callbackResult({
+                    ok: true,
+                    msg: "Agent updated successfully.",
+                }, callback);
             } catch (e) {
                 callbackError(e, callback);
             }

@@ -133,6 +133,11 @@ export class TerminalSocketHandler extends AgentSocketHandler {
                 }
 
                 let buffer : string = Terminal.getTerminal(terminalName)?.getBuffer() ?? "";
+                const terminal = Terminal.getTerminal(terminalName);
+
+                if (terminal) {
+                    terminal.join(socket);
+                }
 
                 if (!buffer) {
                     log.debug("console", "No buffer found.");

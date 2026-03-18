@@ -84,8 +84,17 @@
                             </template>
 
                             <!-- Agent Display Name -->
-                            <span v-if="endpoint === ''">{{ $t("currentEndpoint") }}</span>
-                            <a v-else :href="agentItem.url" target="_blank">{{ endpoint }}</a>
+                            <span v-if="endpoint === ''">{{ buildAgentLabel(endpoint) }}</span>
+                            <a v-else :href="agentItem.url" target="_blank">{{ buildAgentLabel(endpoint) }}</a>
+
+                            <span v-if="agentItem.nickname" class="badge bg-secondary ms-2 agent-nickname">{{ agentItem.nickname }}</span>
+
+                            <font-awesome-icon
+                                v-if="endpoint !== ''"
+                                class="ms-2 remove-agent"
+                                icon="pen"
+                                @click="openEditAgent(agentItem)"
+                            />
 
                             <!-- Remove Button -->
                             <font-awesome-icon v-if="endpoint !== ''" class="ms-2 remove-agent" icon="trash" @click="showRemoveAgentDialog[agentItem.url] = !showRemoveAgentDialog[agentItem.url]" />
@@ -124,6 +133,11 @@
                         <!-- Add Agent Form -->
                         <form v-if="showAgentForm" @submit.prevent="addAgent">
                             <div class="mb-3">
+                                <label for="nickname" class="form-label">Nickname</label>
+                                <input id="nickname" v-model="agent.nickname" type="text" class="form-control" placeholder="Optional node nickname">
+                            </div>
+
+                            <div class="mb-3">
                                 <label for="url" class="form-label">{{ $t("dockgeURL") }}</label>
                                 <input id="url" v-model="agent.url" type="url" class="form-control" required placeholder="http://">
                             </div>
@@ -143,6 +157,30 @@
                                 <template v-else>{{ $t("connect") }}</template>
                             </button>
                         </form>
+
+                        <BModal
+                            v-model="showEditAgentDialog"
+                            title="Edit Agent"
+                            okTitle="Save"
+                            @ok="saveAgentEdit"
+                        >
+                            <div class="mb-3">
+                                <label class="form-label">Nickname</label>
+                                <input v-model="editingAgent.nickname" type="text" class="form-control" placeholder="Optional node nickname">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">{{ $t("Username") }}</label>
+                                <input v-model="editingAgent.username" type="text" class="form-control" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">{{ $t("Password") }}</label>
+                                <input v-model="editingAgent.password" type="password" class="form-control" placeholder="Leave blank to keep existing password" autocomplete="new-password">
+                            </div>
+
+                            <div class="text-muted small">{{ editingAgent.url }}</div>
+                        </BModal>
                     </div>
                 </div>
             </div>
@@ -185,7 +223,15 @@ export default {
             updateAllEndpoint: "",
             updatingAllStacks: false,
             updateAllResult: null,
+            showEditAgentDialog: false,
+            editingAgent: {
+                url: "",
+                username: "",
+                password: "",
+                nickname: "",
+            },
             agent: {
+                nickname: "",
                 url: "http://",
                 username: "",
                 password: "",
@@ -203,12 +249,46 @@ export default {
         exitedNum() {
             return this.getStatusNum("exited");
         },
+        endpointOptions() {
+            const options = [];
+
+            for (const endpoint of Object.keys(this.$root.agentList)) {
+                if (this.$root.agentStatusList[endpoint] !== "online") {
+                    continue;
+                }
+
+                options.push({
+                    value: endpoint,
+                    label: this.buildEndpointOptionLabel(endpoint),
+                });
+            }
+
+            if (!options.some((option) => option.value === "")) {
+                options.unshift({
+                    value: "",
+                    label: this.buildEndpointOptionLabel(""),
+                });
+            }
+
+            return options;
+        },
     },
 
     watch: {
         "$root.agentList": {
             handler() {
+                if (!this.endpointOptions.some((option) => option.value === this.updateAllEndpoint)) {
+                    this.updateAllEndpoint = this.endpointOptions[0]?.value ?? "";
+                }
                 this.loadSystemSpecs();
+            },
+            deep: true,
+        },
+        "$root.agentStatusList": {
+            handler() {
+                if (!this.endpointOptions.some((option) => option.value === this.updateAllEndpoint)) {
+                    this.updateAllEndpoint = this.endpointOptions[0]?.value ?? "";
+                }
             },
             deep: true,
         },
@@ -228,6 +308,7 @@ export default {
 
         window.addEventListener("resize", this.updatePerPage);
         this.updatePerPage();
+        this.updateAllEndpoint = this.endpointOptions[0]?.value ?? "";
         this.loadSystemSpecs();
     },
 
@@ -236,6 +317,15 @@ export default {
     },
 
     methods: {
+        buildAgentLabel(endpoint) {
+            return this.$root.endpointDisplayFunction(endpoint);
+        },
+
+        buildEndpointOptionLabel(endpoint) {
+            const status = this.$root.agentStatusList[endpoint];
+            const label = this.buildAgentLabel(endpoint);
+            return status ? `(${status}) ${label}` : label;
+        },
 
         addAgent() {
             this.connectingAgent = true;
@@ -245,6 +335,7 @@ export default {
                 if (res.ok) {
                     this.showAgentForm = false;
                     this.agent = {
+                        nickname: "",
                         url: "http://",
                         username: "",
                         password: "",
@@ -266,6 +357,26 @@ export default {
                     // Remove the stack list and status list of the removed agent
                     delete this.$root.allAgentStackList[endpoint];
                     delete this.systemSpecs[endpoint];
+                }
+            });
+        },
+
+        openEditAgent(agentItem) {
+            this.editingAgent = {
+                url: agentItem.url,
+                username: agentItem.username,
+                password: "",
+                nickname: agentItem.nickname || "",
+            };
+            this.showEditAgentDialog = true;
+        },
+
+        saveAgentEdit(bvModalEvent) {
+            bvModalEvent.preventDefault();
+            this.$root.getSocket().emit("updateAgent", this.editingAgent, (res) => {
+                this.$root.toastRes(res);
+                if (res.ok) {
+                    this.showEditAgentDialog = false;
                 }
             });
         },
@@ -300,6 +411,11 @@ export default {
         },
 
         updateAllStacks() {
+            if (!this.endpointOptions.some((option) => option.value === this.updateAllEndpoint)) {
+                this.$root.toastError("Select an online node first.");
+                return;
+            }
+
             this.updatingAllStacks = true;
             this.updateAllResult = null;
 
@@ -485,6 +601,10 @@ table {
     a {
         text-decoration: none;
     }
+}
+
+.agent-nickname {
+    font-size: 0.75rem;
 }
 
 .agent-specs {
